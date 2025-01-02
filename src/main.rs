@@ -11,9 +11,14 @@ use physics::solver::Solver;
 async fn main() {
     // Multiple positions 
     let mut solver = Solver::new(&[
-        Vec2::new(100.0, 100.0),
-        Vec2::new(200.0, 200.0)
-    ]);
+        Vec2::new(0.0, 0.0),
+        Vec2::new(200.0, 200.0),
+        Vec2::new(400.0, 300.0)
+    ],
+    Vec2::new(0.0, 1000.0),
+    Vec2::new(screen_width() / 2.0, screen_height() / 2.0),
+    screen_height().min(screen_width()) / 2.0 - 50.0
+    );
 
     // Add single position
     solver.add_positions(&[Vec2::new(150.0, 150.0)]);

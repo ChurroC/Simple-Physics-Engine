@@ -2,20 +2,24 @@ use macroquad::prelude::Vec2;
 use super::verlet::Verlet;
 
 pub struct Solver {
-    gravity: Vec2,
     verlets: Vec<Verlet>,
+    gravity: Vec2,
+    contraint_center: Vec2,
+    contraint_radius: f32,
 }
 
 impl Solver {
-    pub fn new(positions: &[Vec2]) -> Self {
+    pub fn new(positions: &[Vec2], gravity: Vec2, contraint_center: Vec2, contraint_radius: f32) -> Self {
         let verlets = positions
             .iter()
             .map(|&pos| Verlet::new(pos))
             .collect();
 
         Solver {
-            gravity: Vec2::new(333.0, 222.0),
-            verlets
+            verlets,
+            gravity,
+            contraint_center,
+            contraint_radius
         }
     }
 
@@ -49,5 +53,9 @@ impl Solver {
             .collect::<Vec<Verlet>>();
             
         self.verlets.extend(new_verlets);
+    }
+
+    pub fn apply_contraints(&mut self) {
+
     }
 }
