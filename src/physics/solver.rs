@@ -58,7 +58,7 @@ impl Solver {
 
     fn apply_contraints(&mut self, dt: f32) {
         for verlet in &mut self.verlets {
-            let center_dist_vec = verlet.get_position() - self.contraint_center;
+            let center_dist_vec = self.contraint_center - verlet.get_position();
             let center_dist = center_dist_vec.length();
 
             if center_dist > self.contraint_radius - verlet.get_radius() {
@@ -73,10 +73,12 @@ impl Solver {
                 // proj between the rad and the velocity vector = (rad . velocity) / (rad . rad) * rad 
 
                 // Or I could just rotate using matrix multiplication
-                println!("1 {}", (center_dist_unit_vec * verlet.get_velocity(dt))/
-                (center_dist_unit_vec * center_dist_unit_vec) * center_dist_unit_vec);
-                println!("1 {}", ((center_dist_unit_vec * verlet.get_velocity(dt))/
-                (center_dist_unit_vec * center_dist_unit_vec) * center_dist_unit_vec).length());
+                println!("");
+
+
+                let test = verlet.get_velocity(dt) - 2.0 * verlet.get_velocity(dt).dot(center_dist_vec) / center_dist_vec.dot(center_dist_vec) * center_dist_vec;
+                println!("{}", test);
+                println!("{}", test.length());
 
                 // verlet.set_velocity((center_dist_unit_vec * verlet.get_velocity(dt))/
                 //                                 (center_dist_unit_vec * center_dist_unit_vec) * center_dist_unit_vec, dt);v
