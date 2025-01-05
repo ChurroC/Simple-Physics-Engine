@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use macroquad::prelude::*;
 
 
@@ -9,15 +10,23 @@ use physics::solver::Solver;
 
 #[macroquad::main("Game")]
 async fn main() {
-    // Multiple positions 
-    let mut solver = Solver::new(&[
-        Vec2::new(0.0, 0.0),
-        Vec2::new(200.0, 200.0),
-        Vec2::new(400.0, 300.0)
-    ],
-    Vec2::new(0.0, 1000.0),
-    Vec2::new(screen_width() / 2.0, screen_height() / 2.0),
-    screen_height().min(screen_width()) / 2.0 - 50.0
+    // Initialize screen dimensions
+    let screen_width = screen_width();
+    let screen_height = screen_height();
+
+    // Calculate constraint radius
+    let constraint_radius = screen_height.min(screen_width) / 2.0 - 50.0;
+
+
+    let mut solver = Solver::new(
+        &[
+            Vec2::new(0.0, 0.0),
+            Vec2::new(200.0, 200.0),
+            Vec2::new(400.0, 300.0)
+        ],
+        Vec2::new(0.0, 1000.0),
+        Vec2::new(screen_width / 2.0, screen_height / 2.0),
+        constraint_radius
     );
 
     // Add single position
@@ -28,9 +37,10 @@ async fn main() {
         Vec2::new(300.0, 300.0),
         Vec2::new(400.0, 400.0)
     ]);
-
+    
     loop {
         clear_background(BLACK);
+        draw_circle_lines(screen_width / 2.0, screen_height / 2.0, constraint_radius, 1.0, WHITE);  // Draw constraint circle
 
         solver.update(1.0/get_fps() as f32);  // Update physics
     

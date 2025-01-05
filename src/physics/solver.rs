@@ -12,7 +12,7 @@ impl Solver {
     pub fn new(positions: &[Vec2], gravity: Vec2, contraint_center: Vec2, contraint_radius: f32) -> Self {
         let verlets = positions
             .iter()
-            .map(|&pos| Verlet::new(pos))
+            .map(|&pos| Verlet::new(pos, None))
             .collect();
 
         Solver {
@@ -28,13 +28,13 @@ impl Solver {
         self.update_positions(dt);
     }
 
-    pub fn update_positions(&mut self, dt: f32) {
+    fn update_positions(&mut self, dt: f32) {
         for verlet in &mut self.verlets {
-            verlet.update_positions(dt);
+            verlet.update_position(dt);
         }
     }
 
-    pub fn apply_gravity(&mut self) {
+    fn apply_gravity(&mut self) {
         for verlet in &mut self.verlets {
             verlet.accelerate(self.gravity);
         }
@@ -49,13 +49,32 @@ impl Solver {
     pub fn add_positions(&mut self, positions: &[Vec2]) {
         let new_verlets = positions
             .iter()
-            .map(|&pos| Verlet::new(pos))
+            .map(|&pos| Verlet::new(pos, None))
             .collect::<Vec<Verlet>>();
             
         self.verlets.extend(new_verlets);
     }
 
-    pub fn apply_contraints(&mut self) {
+    fn apply_contraints(&mut self, dt: f32) {
+        for verlet in &mut self.verlets {
+            let distance_from_center_vec = verlet.get_position() - self.contraint_center;
+            let distance_from_center = distance_from_center_vec.length();
 
+            if distance_from_center > self.contraint_radius - verlet.get_radius() {
+                let distance_from_center_unit_vec = distance_from_center_vec / distance_from_center; // This is basically dividing the vector by its length giving us the unit vector
+                
+                // Using law of reflection when the ball hits the wall it should reflect back of the tangent line formed by the circular wall
+                // Basically need to rotate the velocity vector by 90 degrees
+                // I could either try projecting the velocity vector onto the tangent line and then subtracting it from the velocity vector
+
+                // For this method we could find the vector that is perp to tangent line or the same direction as radius vector
+                // We prob need to project the vector so thx Mr.Grattoni
+                // proj between the rad and the velocity vector = (rad . velocity) / (rad . rad) * rad 
+
+                // Or I could just rotate using matrix multiplication
+                verlet.set_velocity((distance_from_center_unit_vec * verlet.get_velocity(dt))/
+                                                (distance_from_center_unit_vec * distance_from_center_unit_vec) * distance_from_center_unit_vec, dt);
+            }
+        }
     }
 }
