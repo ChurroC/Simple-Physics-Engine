@@ -20,7 +20,10 @@ async fn main() {
 
     let mut solver = Solver::new(
         &[
-            Vec2::new(260.0, 400.0)
+            Vec2::new(260.0, 400.0),
+            Vec2::new(300.0, 100.0),
+            Vec2::new(10.0, 100.0),
+            Vec2::new(400.0, 0.0),
         ],
         Vec2::new(0.0, 0.001),
         Vec2::new(screen_width / 2.0, screen_height / 2.0),

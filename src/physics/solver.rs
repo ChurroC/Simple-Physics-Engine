@@ -62,31 +62,30 @@ impl Solver {
             let center_dist = center_dist_vec.length();
 
             if center_dist > self.contraint_radius - verlet.get_radius() {
-                let center_dist_unit_vec = center_dist_vec / center_dist; // This is basically dividing the vector by its length giving us the unit vector
-                
-                // Using law of reflection when the ball hits the wall it should reflect back of the tangent line formed by the circular wall
-                // Basically need to rotate the velocity vector by 90 degrees
-                // I could either try projecting the velocity vector onto the tangent line and then subtracting it from the velocity vector
-
-                // For this method we could find the vector that is perp to tangent line or the same direction as radius vector
-                // We prob need to project the vector so thx Mr.Grattoni
-                // proj between the rad and the velocity vector = (rad . velocity) / (rad . rad) * rad 
+                println!("");
+                // First idea I have is to somehow reflect the velocity vector across the tangent line formed by the circular wall
+                // What I though of is to find the projection of the velocity vector to the radius line (center_dist_vec) which is a the normal portion of the velocity vector
+                // Then we could subtract the normal portion to get the tangent portion of the velocity vector then do it again to get the reflected vector
+                // verlet.get_velocity(dt) - 2.0 * verlet.get_velocity(dt).dot(center_dist_vec) / center_dist_vec.dot(center_dist_vec) * center_dist_vec
+                // Easiest way to understand in just an x and y axis is to imagien the velocity vector is (1, -1) and the center_dist_vec is the y where I add (0, 1) to the velocity twice to get (1, 1) which is reflected across the y axis here and not the tangent axis
+                let reflect_vector = - 2.0 * verlet.get_velocity(dt).dot(center_dist_vec) / center_dist_vec.dot(center_dist_vec) * center_dist_vec;
+                verlet.set_velocity( verlet.get_velocity(dt) + reflect_vector, dt);
+                // println!("{}", verlet.get_velocity(dt) + reflect_vector);
 
                 // Or I could just rotate using matrix multiplication
-                println!("");
+                // At first I thought of using a roation of matrix to rotate it by 90 degress but it only works for some sections of the circle
+                // I need to reflect it across the tangent line which is perpendicular to the radius line
+                // let center_dist_unit_vec = center_dist_vec / center_dist;
+                // let reflect_matrix = Mat2::from_cols(
+                //     Vec2::new(1.0 - 2.0 * center_dist_unit_vec.x * center_dist_unit_vec.x, -2.0 * center_dist_unit_vec.x * center_dist_unit_vec.y),
+                //     Vec2::new(-2.0 * center_dist_unit_vec.x * center_dist_unit_vec.y, 1.0 - 2.0 * center_dist_unit_vec.y * center_dist_unit_vec.y)
+                // );
+                // let reflect_vector = reflect_matrix * verlet.get_velocity(dt);
+                // verlet.set_velocity(reflect_vector, dt);
+                // println!("{}", reflect_vector);
 
-
-                let test = verlet.get_velocity(dt) - 2.0 * verlet.get_velocity(dt).dot(center_dist_vec) / center_dist_vec.dot(center_dist_vec) * center_dist_vec;
-                println!("{}", test);
-                println!("{}", test.length());
-
-                // verlet.set_velocity((center_dist_unit_vec * verlet.get_velocity(dt))/
-                //                                 (center_dist_unit_vec * center_dist_unit_vec) * center_dist_unit_vec, dt);v
-                let vel = verlet.get_velocity(dt);
-                let perp = Vec2::new(-center_dist_unit_vec.y, center_dist_unit_vec.x);
-                println!("2 {}", 2.0 * (vel.x * perp.x + vel.y * perp.y) * perp - vel);
-                println!("2 {}", (2.0 * (vel.x * perp.x + vel.y * perp.y) * perp - vel).length());
-                verlet.set_velocity(2.0 * (vel.x * perp.x + vel.y * perp.y) * perp - vel, dt);
+                // Also turns out that there is an actual formula for this which is the reflection formula
+                // V - 2(dot(V, N))N
             }
         }
     }
