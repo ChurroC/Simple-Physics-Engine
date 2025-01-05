@@ -25,6 +25,7 @@ impl Solver {
 
     pub fn update(&mut self, dt: f32) {
         self.apply_gravity();
+        self.apply_contraints(dt);
         self.update_positions(dt);
     }
 
@@ -57,11 +58,11 @@ impl Solver {
 
     fn apply_contraints(&mut self, dt: f32) {
         for verlet in &mut self.verlets {
-            let distance_from_center_vec = verlet.get_position() - self.contraint_center;
-            let distance_from_center = distance_from_center_vec.length();
+            let center_dist_vec = verlet.get_position() - self.contraint_center;
+            let center_dist = center_dist_vec.length();
 
-            if distance_from_center > self.contraint_radius - verlet.get_radius() {
-                let distance_from_center_unit_vec = distance_from_center_vec / distance_from_center; // This is basically dividing the vector by its length giving us the unit vector
+            if center_dist > self.contraint_radius - verlet.get_radius() {
+                let center_dist_unit_vec = center_dist_vec / center_dist; // This is basically dividing the vector by its length giving us the unit vector
                 
                 // Using law of reflection when the ball hits the wall it should reflect back of the tangent line formed by the circular wall
                 // Basically need to rotate the velocity vector by 90 degrees
@@ -72,8 +73,18 @@ impl Solver {
                 // proj between the rad and the velocity vector = (rad . velocity) / (rad . rad) * rad 
 
                 // Or I could just rotate using matrix multiplication
-                verlet.set_velocity((distance_from_center_unit_vec * verlet.get_velocity(dt))/
-                                                (distance_from_center_unit_vec * distance_from_center_unit_vec) * distance_from_center_unit_vec, dt);
+                println!("1 {}", (center_dist_unit_vec * verlet.get_velocity(dt))/
+                (center_dist_unit_vec * center_dist_unit_vec) * center_dist_unit_vec);
+                println!("1 {}", ((center_dist_unit_vec * verlet.get_velocity(dt))/
+                (center_dist_unit_vec * center_dist_unit_vec) * center_dist_unit_vec).length());
+
+                // verlet.set_velocity((center_dist_unit_vec * verlet.get_velocity(dt))/
+                //                                 (center_dist_unit_vec * center_dist_unit_vec) * center_dist_unit_vec, dt);v
+                let vel = verlet.get_velocity(dt);
+                let perp = Vec2::new(-center_dist_unit_vec.y, center_dist_unit_vec.x);
+                println!("2 {}", 2.0 * (vel.x * perp.x + vel.y * perp.y) * perp - vel);
+                println!("2 {}", (2.0 * (vel.x * perp.x + vel.y * perp.y) * perp - vel).length());
+                verlet.set_velocity(2.0 * (vel.x * perp.x + vel.y * perp.y) * perp - vel, dt);
             }
         }
     }

@@ -8,12 +8,13 @@ pub struct Verlet {
 }
 
 impl Verlet {
-    pub fn new(position: Vec2, radius: Option<f32>) -> Self {
+    pub fn new(position: Vec2, radius: impl Into<Option<f32>>) -> Self {
+        let radius = radius.into();
         Verlet {
             position,
             old_position: position,
             acceleration: Vec2::ZERO,
-            radius: radius.unwrap_or(50.0),
+            radius: radius.unwrap_or(10.0),
         }
     }
     
