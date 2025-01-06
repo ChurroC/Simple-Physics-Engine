@@ -4,6 +4,7 @@ pub struct Verlet {
     position: Vec2,
     old_position: Vec2,
     acceleration: Vec2,
+    last_acceleration: Vec2,
     radius: f32,
 }
 
@@ -14,6 +15,7 @@ impl Verlet {
             position,
             old_position: position,
             acceleration: Vec2::ZERO,
+            last_acceleration: Vec2::ZERO,
             radius: radius.unwrap_or(10.0),
         }
     }
@@ -47,10 +49,15 @@ impl Verlet {
         self.old_position = self.position; // P(n-1) = P(n)
         self.position += displacement + self.acceleration * dt * dt; // Verlet integration - P(n+1) = 2P(n) - P(n-1) + a(n) * dt^2 = P(n) + V(n) + a(n) * dt^2
         
+        self.last_acceleration = self.acceleration;
         self.acceleration = Vec2::ZERO; // Reset acceleration applied at this frame
     }
 
     pub fn accelerate(&mut self, acceleration: Vec2){
         self.acceleration += acceleration;
+    }
+
+    pub fn get_acceleration(&self) -> Vec2 {
+        self.last_acceleration
     }
 }

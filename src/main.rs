@@ -41,24 +41,23 @@ async fn main() {
             solver.add_position(Vec2::new(mouse_position().0, mouse_position().1));  // Add new position at mouse position
         }
 
-        let physics_start = get_time();
+        
         solver.update(delta_time);
-        let physics_end = get_time();
-        let physics_duration = physics_end - physics_start;
 
     
         // Draw all verlet objects
-        for pos in solver.get_positions() {
-            draw_circle(pos.x, pos.y, 10.0, BLUE);
+        for verlet in solver.get_verlets() {
+            let (x, y) = verlet.get_position().into();
+            draw_circle(x, y, 10.0, BLUE);
+            draw_arrow(verlet.get_position(), verlet.get_position() + verlet.get_velocity(delta_time), ORANGE);
+            draw_arrow(verlet.get_position(), verlet.get_position() + verlet.get_acceleration() / 10.0, RED);
         }
 
         // Enhanced debug display
         draw_text(
             &format!(
-                "FPS: {}\nFrame Time: {:.4}ms\nPhysics Time: {:.4}ms", 
+                "FPS: {}", 
                 get_fps(),
-                delta_time * 1000.0,
-                physics_duration * 1000.0
             ),
             20.0,
             30.0,
@@ -67,4 +66,30 @@ async fn main() {
         );
         next_frame().await;
     }
+}
+
+fn draw_arrow(start: Vec2, end: Vec2, color: Color) {
+    // Draw the shaft of the arrow
+    draw_line(start.x, start.y, end.x, end.y, 2.0, color);
+
+    // Calculate the direction vector
+    let direction = (end - start).normalize();
+
+    // Calculate the points for the arrowhead
+    let arrowhead_length = 10.0;
+    let arrowhead_angle = 30.0f32.to_radians();
+
+    let left_arrowhead = Vec2::new(
+        end.x - arrowhead_length * (direction.x * arrowhead_angle.cos() - direction.y * arrowhead_angle.sin()),
+        end.y - arrowhead_length * (direction.x * arrowhead_angle.sin() + direction.y * arrowhead_angle.cos()),
+    );
+
+    let right_arrowhead = Vec2::new(
+        end.x - arrowhead_length * (direction.x * arrowhead_angle.cos() + direction.y * arrowhead_angle.sin()),
+        end.y - arrowhead_length * (-direction.x * arrowhead_angle.sin() + direction.y * arrowhead_angle.cos()),
+    );
+
+    // Draw the arrowhead
+    draw_line(end.x, end.y, left_arrowhead.x, left_arrowhead.y, 2.0, color);
+    draw_line(end.x, end.y, right_arrowhead.x, right_arrowhead.y, 2.0, color);
 }

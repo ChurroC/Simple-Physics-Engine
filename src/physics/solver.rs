@@ -1,5 +1,5 @@
 use macroquad::prelude::Vec2;
-use super::verlet::{self, Verlet};
+use super::verlet::Verlet;
 
 pub struct Solver {
     verlets: Vec<Verlet>,
@@ -30,7 +30,7 @@ impl Solver {
         for _ in 0..self.substep {
             self.apply_gravity();
             self.apply_contraints(substep_dt);
-            self.solve_collisions(substep_dt);
+            // self.solve_collisions(substep_dt);
             self.update_positions(substep_dt);
         }
     }
@@ -81,23 +81,23 @@ impl Solver {
         }
     }
 
-    fn solve_collisions(&mut self, dt: f32) {
-        let verlet_count = self.verlets.len();
-        let coefficient_of_restitution = 0.75;
+    // fn solve_collisions(&mut self, dt: f32) {
+    //     let verlet_count = self.verlets.len();
+    //     let coefficient_of_restitution = 0.75;
 
-        for i in 0..verlet_count {
-            for j in i + 1..verlet_count {
-                let (left, right) = self.verlets.split_at_mut(j);
-                let verlet1 = &mut left[i];
-                let verlet2 = &mut right[0];
+    //     for i in 0..verlet_count {
+    //         for j in i + 1..verlet_count {
+    //             let (left, right) = self.verlets.split_at_mut(j);
+    //             let verlet1 = &mut left[i];
+    //             let verlet2 = &mut right[0];
                 
-                let normal = verlet1.get_position() - verlet2.get_position(); // This is the distance vector between the two verlets which is also the normal vector to the plane of collison
+    //             let normal = verlet1.get_position() - verlet2.get_position(); // This is the distance vector between the two verlets which is also the normal vector to the plane of collison
 
-                let verlet1_proj = verlet1.
-                }
-            }
-        }
-    }
+    //             let verlet1_proj = verlet1.
+    //             }
+    //         }
+    //     }
+    // }
 
     pub fn get_positions(&self) -> Vec<Vec2> {
         self.verlets.iter()
@@ -115,6 +115,10 @@ impl Solver {
             .collect::<Vec<Verlet>>();
             
         self.verlets.extend(new_verlets);
+    }
+
+    pub fn get_verlets(&self) -> &Vec<Verlet> {
+        &self.verlets
     }
 
 }
