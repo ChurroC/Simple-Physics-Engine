@@ -1,5 +1,5 @@
 use macroquad::prelude::Vec2;
-use super::verlet::Verlet;
+use super::verlet::{self, Verlet};
 
 pub struct Solver {
     verlets: Vec<Verlet>,
@@ -83,7 +83,7 @@ impl Solver {
 
     fn solve_collisions(&mut self, dt: f32) {
         let verlet_count = self.verlets.len();
-        let collision_coefficient = 0.75;
+        let coefficient_of_restitution = 0.75;
 
         for i in 0..verlet_count {
             for j in i + 1..verlet_count {
@@ -91,40 +91,9 @@ impl Solver {
                 let verlet1 = &mut left[i];
                 let verlet2 = &mut right[0];
                 
-                let dist_vec = verlet2.get_position() - verlet1.get_position();
-                let dist = dist_vec.length();
-                let min_dist = verlet1.get_radius() + verlet2.get_radius();
-    
-                if dist < min_dist {
-                    let dist_unit_vec = dist_vec / dist;
-                    let overlap: f32 = min_dist - dist;
-                    
-                    let mass_ratio_1 = verlet1.get_radius() / (verlet1.get_radius() + verlet2.get_radius());
-                    let mass_ratio_2 = verlet2.get_radius() / (verlet1.get_radius() + verlet2.get_radius());
+                let normal = verlet1.get_position() - verlet2.get_position(); // This is the distance vector between the two verlets which is also the normal vector to the plane of collison
 
-
-                    let delta = 0.5 * collision_coefficient * overlap;
-                
-                    // Convert position changes to accelerations
-                    verlet1.accelerate(-dist_unit_vec * (mass_ratio_2 * delta));
-                    verlet2.accelerate(dist_unit_vec * (mass_ratio_1 * delta));
-                        
-                    // Velocity reflection
-                    let v1 = verlet1.get_velocity(dt);
-                    let v2 = verlet2.get_velocity(dt);
-                    
-                    // Calculate relative velocity
-                    let rel_velocity = v2 - v1;
-                    
-                    // Calculate impulse
-                    let normal_velocity = rel_velocity.dot(dist_unit_vec);
-                    if normal_velocity < 0.0 {  // Only reflect if objects are moving toward each other
-                        let impulse = -2.0 * normal_velocity * collision_coefficient;
-                        
-                        // Apply impulse in opposite directions
-                        verlet1.add_velocity(-dist_unit_vec * (impulse * mass_ratio_2), dt);
-                        verlet2.add_velocity(dist_unit_vec * (impulse * mass_ratio_1), dt);
-                    }
+                let verlet1_proj = verlet1.
                 }
             }
         }
