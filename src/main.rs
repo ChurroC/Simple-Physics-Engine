@@ -19,7 +19,7 @@ async fn main() {
     let subset = 10;
     let mut solver = Solver::new(
         &[
-            
+            Vec2::new(screen_width / 2.0, screen_height / 2.0),
         ],
         Vec2::new(0.0, 500.0),
         Vec2::new(screen_width / 2.0, screen_height / 2.0),
