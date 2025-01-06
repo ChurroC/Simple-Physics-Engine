@@ -27,13 +27,17 @@ async fn main() {
         subset,
     );
 
+    let fixed_dt = 1.0 / 60.0;  // Fixed 60 FPS physics update
+    let mut accumulator = 0.0;
     let mut last_time = get_time();
     
     loop {
         let current_time = get_time();
-        let delta_time = (current_time - last_time) as f32;
+        let frame_time = (current_time - last_time) as f32;
         last_time = current_time;
-
+        
+        accumulator += frame_time;
+        
         clear_background(BLACK);
         draw_circle_lines(screen_width / 2.0, screen_height / 2.0, constraint_radius, 1.0, WHITE);  // Draw constraint circle
 
@@ -42,14 +46,19 @@ async fn main() {
         }
 
         
-        solver.update(delta_time);
+        // Update physics with fixed timestep, might run multiple times per frame
+        while accumulator >= fixed_dt {
+            solver.update(fixed_dt);
+            accumulator -= fixed_dt;
+        }
+
 
     
         // Draw all verlet objects
         for verlet in solver.get_verlets() {
             let (x, y) = verlet.get_position().into();
             draw_circle(x, y, 10.0, BLUE);
-            draw_arrow(verlet.get_position(), verlet.get_position() + verlet.get_velocity(delta_time), ORANGE);
+            draw_arrow(verlet.get_position(), verlet.get_position() + verlet.get_velocity(frame_time) / 7.0, ORANGE);
             draw_arrow(verlet.get_position(), verlet.get_position() + verlet.get_acceleration() / 10.0, RED);
         }
 

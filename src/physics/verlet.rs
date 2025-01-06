@@ -45,9 +45,11 @@ impl Verlet {
     }
 
     pub fn update_position(&mut self, dt: f32){
-        let displacement = self.position - self.old_position; // V(n-1) * dt = P(n) - P(n-1)
-        self.old_position = self.position; // P(n-1) = P(n)
-        self.position += displacement + self.acceleration * dt * dt; // Verlet integration - P(n+1) = 2P(n) - P(n-1) + a(n) * dt^2 = P(n) + V(n) + a(n) * dt^2
+        let current = self.position;
+        let old = self.old_position;
+        
+        self.position = 2.0 * current - old + self.acceleration * dt * dt;
+        self.old_position = current;
         
         self.last_acceleration = self.acceleration;
         self.acceleration = Vec2::ZERO; // Reset acceleration applied at this frame
