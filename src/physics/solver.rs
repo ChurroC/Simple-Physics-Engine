@@ -24,7 +24,7 @@ impl Solver {
         let substep_dt = dt / self.substep as f32;
         for _ in 0..self.substep {
             self.apply_gravity();
-            self.apply_constraints();
+            self.apply_constraints(substep_dt);
             // self.solve_collisions(substep_dt);
             self.update_positions(substep_dt);
         }
@@ -42,30 +42,57 @@ impl Solver {
         }
     }
 
-    fn apply_constraints(&mut self) {
+    /*
+        
+    * Apply    
+     */
+    fn apply_constraints(&mut self, dt: f32) {
         for verlet in &mut self.verlets {
-            // Vector from circle center to verlet
-            let to_verlet = verlet.get_position() - self.constraint_center;
-            let dist = to_verlet.length();
+            let normal = verlet.get_position() - self.constraint_center; // Or distance to verlet from center
+            let dist = normal.length();
             
-            // Check if the verlet is outside the constraint (accounting for verlet's radius)
             if dist > self.constraint_radius - verlet.get_radius() {
-                // Calculate the normalized direction vector (pointing inward)
-                let normal = -to_verlet.normalize();
+                /*
+                    v_1f = [v_1 (m_1 - m_2) + 2 m_2 v_2]/(m_1 + m_2)
+                    as m2 goes to infinty since a wall with infinte mass
+                    m_1 - m_2 = -m_2
+                    m_1 + m_2 = m_2
+                    v_2 = 0
+                    v_1f = -v_1
+
+                    so the change in velocity is -2v_1 since v_1f - v_1 = -v_1 - v_1 = -2v_1
+                 */
                 
-                // Get current velocity
-                let velocity = verlet.get_velocity();
+                // Project v in the direction of the normal from wall
+                // projection is
+                // v_normal = [(v . n) / (n . n)] * n / n. n 
+                // v_normal = [(v . n) / |n|] * n / |n|
+                // v_normal = [|v| |n| cos(theta) / |n|] * n / |n|
+                // v_normal = |v| cos(theta) * n / |n|
+                // v_normal = v cos(theta) * n_unit
+                // Makes sense cause we get v cos of angle whic his projected onto the normal vector
+                // Then we multiple by normal vector to vector distance
+                // So easy way to show in code is prob v_normal = v . n * |n|^2
+
+                // Since we get value of v on on using dot product v . n then project the length onto the the unit vector of v
+                // So we could just do 
+                let vel = verlet.get_velocity();
+                let v_normal = vel.project_onto(normal);
                 
-                // Calculate penetration depth
-                let penetration = dist - (self.constraint_radius - verlet.get_radius());
                 
-                // Calculate bounce acceleration
-                let bounce_force = normal * (penetration * 100000000.0); // Spring constant = 1000.0
-                let damping_force = -velocity * 10.0; // Damping coefficient = 10.0
+                // Calculate acceleration needed for velocity change
+                // For a complete reversal of normal velocity: Δv = -2v_normal
+                // a = Δv/Δt where Δt is our simulation timestep
+                let delta_v = -2.0 * v_normal;
+                // We need this change in velocity over the next frame
+                let accel = delta_v / dt;
                 
-                // Add bounce acceleration
-                let mass = verlet.get_mass();
-                verlet.add_acceleration((bounce_force + damping_force) / mass);
+                // Position correction (must satisfy constraint exactly)
+                let penetration = normal - (self.constraint_radius - verlet.get_radius());
+                let position_correction = penetration.project_onto(normal);
+                
+                // Apply acceleration and position correction
+                verlet.add_acceleration(accel + position_correction);
             }
         }
     }

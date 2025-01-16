@@ -16,7 +16,7 @@ async fn main() {
     // Calculate constraint radius
     let constraint_radius = screen_height.min(screen_width) / 2.0 - 50.0;
 
-    let subset = 10;
+    let substep = 8;
     let mut solver = Solver::new(
         &[
             Verlet::new(Vec2::new(screen_width / 2.0, screen_height / 2.0)),
@@ -24,7 +24,7 @@ async fn main() {
         Vec2::new(0.0, 500.0),
         Vec2::new(screen_width / 2.0, screen_height / 2.0),
         constraint_radius,
-        subset,
+        substep,
     );
 
     let fixed_dt = 1.0 / 60.0;  // Fixed 60 FPS physics update
