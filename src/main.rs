@@ -5,7 +5,7 @@ mod physics {
     pub mod solver;
     pub mod verlet;  // Make sure to add this!
 }
-use physics::solver::Solver;
+use physics::{solver::Solver, verlet::Verlet};
 
 #[macroquad::main("Game")]
 async fn main() {
@@ -19,7 +19,7 @@ async fn main() {
     let subset = 10;
     let mut solver = Solver::new(
         &[
-            Vec2::new(screen_width / 2.0, screen_height / 2.0),
+            Verlet::new(Vec2::new(screen_width / 2.0, screen_height / 2.0)),
         ],
         Vec2::new(0.0, 500.0),
         Vec2::new(screen_width / 2.0, screen_height / 2.0),
@@ -58,7 +58,7 @@ async fn main() {
         for verlet in solver.get_verlets() {
             let (x, y) = verlet.get_position().into();
             draw_circle(x, y, 10.0, BLUE);
-            draw_arrow(verlet.get_position(), verlet.get_position() + verlet.get_velocity(frame_time) / 7.0, ORANGE);
+            draw_arrow(verlet.get_position(), verlet.get_position() + verlet.get_velocity() / 5.0, ORANGE);
             draw_arrow(verlet.get_position(), verlet.get_position() + verlet.get_acceleration() / 10.0, RED);
         }
 

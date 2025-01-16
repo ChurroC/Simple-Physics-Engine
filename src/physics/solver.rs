@@ -4,23 +4,18 @@ use super::verlet::Verlet;
 pub struct Solver {
     verlets: Vec<Verlet>,
     gravity: Vec2,
-    contraint_center: Vec2,
-    contraint_radius: f32,
+    constraint_center: Vec2,
+    constraint_radius: f32,
     substep: u32,
 }
 
 impl Solver {
-    pub fn new(positions: &[Vec2], gravity: Vec2, contraint_center: Vec2, contraint_radius: f32, substep: u32) -> Self {
-        let verlets = positions
-            .iter()
-            .map(|&pos| Verlet::new(pos, None))
-            .collect();
-
+    pub fn new(verlets: &[Verlet], gravity: Vec2, constraint_center: Vec2, constraint_radius: f32, substep: u32) -> Self {
         Solver {
-            verlets,
+            verlets: verlets.iter().cloned().collect(),
             gravity,
-            contraint_center,
-            contraint_radius,
+            constraint_center,
+            constraint_radius,
             substep
         }
     }
@@ -29,7 +24,7 @@ impl Solver {
         let substep_dt = dt / self.substep as f32;
         for _ in 0..self.substep {
             self.apply_gravity();
-            self.apply_contraints(substep_dt);
+            self.apply_constraints();
             // self.solve_collisions(substep_dt);
             self.update_positions(substep_dt);
         }
@@ -43,22 +38,39 @@ impl Solver {
 
     fn apply_gravity(&mut self) {
         for verlet in &mut self.verlets {
-            verlet.accelerate(self.gravity);
+            verlet.add_acceleration(self.gravity);
         }
     }
 
-    fn apply_contraints(&mut self, dt: f32) {
+    fn apply_constraints(&mut self) {
         for verlet in &mut self.verlets {
-            let center_dist_vec = self.contraint_center - verlet.get_position();
-            let center_dist = center_dist_vec.length();
-
-            if center_dist > self.contraint_radius - verlet.get_radius() {
-                let velocity = verlet.get_velocity(dt);
-                let reflect_vector = - 2.0 * velocity.dot(center_dist_vec) / center_dist_vec.dot(center_dist_vec) * center_dist_vec;
-                verlet.add_velocity(reflect_vector, dt);
+            // Vector from circle center to verlet
+            let to_verlet = verlet.get_position() - self.constraint_center;
+            let dist = to_verlet.length();
+            
+            // Check if the verlet is outside the constraint (accounting for verlet's radius)
+            if dist > self.constraint_radius - verlet.get_radius() {
+                // Calculate the normalized direction vector (pointing inward)
+                let normal = -to_verlet.normalize();
+                
+                // Get current velocity
+                let velocity = verlet.get_velocity();
+                
+                // Calculate penetration depth
+                let penetration = dist - (self.constraint_radius - verlet.get_radius());
+                
+                // Calculate bounce acceleration
+                let bounce_force = normal * (penetration * 100000000.0); // Spring constant = 1000.0
+                let damping_force = -velocity * 10.0; // Damping coefficient = 10.0
+                
+                // Add bounce acceleration
+                let mass = verlet.get_mass();
+                verlet.add_acceleration((bounce_force + damping_force) / mass);
             }
         }
     }
+    
+    
 
     // fn solve_collisions(&mut self, dt: f32) {
     //     let verlet_count = self.verlets.len();
@@ -131,12 +143,12 @@ impl Solver {
     }
 
     pub fn add_position(&mut self, position: Vec2) {
-        self.verlets.push(Verlet::new(position, None));
+        self.verlets.push(Verlet::new(position));
     }
     pub fn add_positions(&mut self, positions: &[Vec2]) {
         let new_verlets = positions
             .iter()
-            .map(|&pos| Verlet::new(pos, None))
+            .map(|&pos| Verlet::new(pos))
             .collect::<Vec<Verlet>>();
             
         self.verlets.extend(new_verlets);
