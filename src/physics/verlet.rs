@@ -48,9 +48,6 @@ impl Verlet {
     pub fn add_acceleration(&mut self, acceleration: Vec2){
         self.acceleration += acceleration;
     }
-    pub fn add_force(&mut self, force: Vec2){
-        self.acceleration += force / self.get_mass();
-    }
 
     pub fn get_position(&self) -> Vec2 {
         self.position  // Vec2 is Copy, so this creates a copy automatically
@@ -62,6 +59,19 @@ impl Verlet {
         } else {
             (self.position - self.last_position) / self.last_dt
         }
+    }
+
+    pub fn set_velocity(&mut self, velocity: Vec2, dt: f32) {
+        self.last_position = self.position - velocity * dt;
+    }
+
+    pub fn add_velocity(&mut self, velocity: Vec2, dt: f32) {
+        self.last_position -= velocity * dt;
+    }
+
+    pub fn set_position(&mut self, position: Vec2) {
+        self.position = position;
+        self.last_position = position;
     }
 
     pub fn get_acceleration(&self) -> Vec2 {

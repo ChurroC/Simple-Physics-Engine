@@ -42,57 +42,20 @@ impl Solver {
         }
     }
 
-    /*
-        
-    * Apply    
-     */
     fn apply_constraints(&mut self, dt: f32) {
         for verlet in &mut self.verlets {
             let normal = verlet.get_position() - self.constraint_center; // Or distance to verlet from center
             let dist = normal.length();
             
             if dist > self.constraint_radius - verlet.get_radius() {
-                /*
-                    v_1f = [v_1 (m_1 - m_2) + 2 m_2 v_2]/(m_1 + m_2)
-                    as m2 goes to infinty since a wall with infinte mass
-                    m_1 - m_2 = -m_2
-                    m_1 + m_2 = m_2
-                    v_2 = 0
-                    v_1f = -v_1
+                let unit_normal = normal.normalize();
 
-                    so the change in velocity is -2v_1 since v_1f - v_1 = -v_1 - v_1 = -2v_1
-                 */
-                
-                // Project v in the direction of the normal from wall
-                // projection is
-                // v_normal = [(v . n) / (n . n)] * n / n. n 
-                // v_normal = [(v . n) / |n|] * n / |n|
-                // v_normal = [|v| |n| cos(theta) / |n|] * n / |n|
-                // v_normal = |v| cos(theta) * n / |n|
-                // v_normal = v cos(theta) * n_unit
-                // Makes sense cause we get v cos of angle whic his projected onto the normal vector
-                // Then we multiple by normal vector to vector distance
-                // So easy way to show in code is prob v_normal = v . n * |n|^2
-
-                // Since we get value of v on on using dot product v . n then project the length onto the the unit vector of v
-                // So we could just do 
                 let vel = verlet.get_velocity();
-                let v_normal = vel.project_onto(normal);
-                
-                
-                // Calculate acceleration needed for velocity change
-                // For a complete reversal of normal velocity: Δv = -2v_normal
-                // a = Δv/Δt where Δt is our simulation timestep
-                let delta_v = -2.0 * v_normal;
-                // We need this change in velocity over the next frame
-                let accel = delta_v / dt;
-                
-                // Position correction (must satisfy constraint exactly)
-                let penetration = normal - (self.constraint_radius - verlet.get_radius());
-                let position_correction = penetration.project_onto(normal);
-                
-                // Apply acceleration and position correction
-                verlet.add_acceleration(accel + position_correction);
+                let v_normal = vel.project_onto(unit_normal);
+
+                let correct_position = self.constraint_center + normal.normalize() * (self.constraint_radius - verlet.get_radius());
+                verlet.set_position(correct_position);
+                verlet.add_velocity(-2.0 * v_normal, dt); // Just push the portion normal to the wall inverse
             }
         }
     }
