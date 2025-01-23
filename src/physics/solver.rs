@@ -25,7 +25,7 @@ impl Solver {
         for _ in 0..self.substep {
             self.apply_gravity();
             self.apply_constraints(substep_dt);
-            // self.solve_collisions(substep_dt);
+            self.solve_collisions(substep_dt);
             self.update_positions(substep_dt);
         }
     }
@@ -44,87 +44,57 @@ impl Solver {
 
     fn apply_constraints(&mut self, dt: f32) {
         for verlet in &mut self.verlets {
-            let normal = verlet.get_position() - self.constraint_center; // Or distance to verlet from center
-            let dist = normal.length();
+            let dist_to_vert = verlet.get_position() - self.constraint_center; // Or distance to verlet from center
+            let dist = dist_to_vert.length();
             
             if dist > self.constraint_radius - verlet.get_radius() {
-                let unit_normal = normal.normalize();
+                let unit_normal = dist_to_vert.normalize();
 
                 let vel = verlet.get_velocity();
                 let v_normal = vel.project_onto(unit_normal);
 
-                let correct_position = self.constraint_center + normal.normalize() * (self.constraint_radius - verlet.get_radius());
+                let correct_position = self.constraint_center + unit_normal * (self.constraint_radius - verlet.get_radius());
                 verlet.set_position(correct_position);
-                verlet.add_velocity(-2.0 * v_normal, dt); // Just push the portion normal to the wall inverse
+                verlet.set_velocity( vel - 2.0 * v_normal, dt); // Just push the portion normal to the wall inverse
             }
         }
     }
     
     
 
-    // fn solve_collisions(&mut self, dt: f32) {
-    //     let verlet_count = self.verlets.len();
-    //     let coefficient_of_restitution = 0.75;
+    fn solve_collisions(&mut self, dt: f32) {
+        let verlet_count = self.verlets.len();
+        let coefficient_of_restitution = 1.0;
 
-    //     for i in 0..verlet_count {
-    //         for j in i + 1..verlet_count {
-    //             let (left, right) = self.verlets.split_at_mut(j);
-    //             let verlet1 = &mut left[i];
-    //             let verlet2 = &mut right[0];
+        for i in 0..verlet_count {
+            for j in i + 1..verlet_count {
+                let (left, right) = self.verlets.split_at_mut(j);
+                let verlet1 = &mut left[i];
+                let verlet2 = &mut right[0];
                 
-    //             let normal = verlet1.get_position() - verlet2.get_position(); // This is the distance vector between the two verlets which is also the normal vector to the plane of collison
+                let collision_axis = verlet1.get_position() - verlet2.get_position(); // This is the distance vector between the two verlets which is also the collision_axis vector to the plane of collison
+                let dist = collision_axis.length();
+                let min_dist = verlet1.get_radius() + verlet2.get_radius();
 
-    //             let verlet1_proj = verlet1.
-    //             }
-    //         }
-    //     }
-    // }
+                if dist < min_dist {
+                    let vel1 = verlet1.get_velocity().project_onto(collision_axis);
+                    let vel2 = verlet2.get_velocity().project_onto(collision_axis);
+                    let m1 = verlet1.get_mass();
+                    let m2 = verlet2.get_mass();
 
-    // fn solve_collisions(&mut self, dt: f32) {
-    //     let verlet_count = self.verlets.len();
-    //     let collision_coefficient = 0.75;
-    //     for i in 0..verlet_count {
-    //         for j in i + 1..verlet_count {
-    //             let (left, right) = self.verlets.split_at_mut(j);
-    //             let verlet1 = &mut left[i];
-    //             let verlet2 = &mut right[0];
-                
-    //             let dist_vec = verlet2.get_position() - verlet1.get_position();
-    //             let dist = dist_vec.length();
-    //             let min_dist = verlet1.get_radius() + verlet2.get_radius();
-    
-    //             if dist < min_dist {
-    //                 let dist_unit_vec = dist_vec / dist;
-    //                 let overlap: f32 = min_dist - dist;
-                    
-    //                 let mass_ratio_1 = verlet1.get_radius() / (verlet1.get_radius() + verlet2.get_radius());
-    //                 let mass_ratio_2 = verlet2.get_radius() / (verlet1.get_radius() + verlet2.get_radius());
-    //                 let delta = 0.5 * collision_coefficient * overlap;
-                
-    //                 // Convert position changes to accelerations
-    //                 verlet1.accelerate(-dist_unit_vec * (mass_ratio_2 * delta));
-    //                 verlet2.accelerate(dist_unit_vec * (mass_ratio_1 * delta));
-                        
-    //                 // Velocity reflection
-    //                 let v1 = verlet1.get_velocity(dt);
-    //                 let v2 = verlet2.get_velocity(dt);
-                    
-    //                 // Calculate relative velocity
-    //                 let rel_velocity = v2 - v1;
-                    
-    //                 // Calculate impulse
-    //                 let normal_velocity = rel_velocity.dot(dist_unit_vec);
-    //                 if normal_velocity < 0.0 {  // Only reflect if objects are moving toward each other
-    //                     let impulse = -2.0 * normal_velocity * collision_coefficient;
-                        
-    //                     // Apply impulse in opposite directions
-    //                     verlet1.add_velocity(-dist_unit_vec * (impulse * mass_ratio_2), dt);
-    //                     verlet2.add_velocity(dist_unit_vec * (impulse * mass_ratio_1), dt);
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
+                    let vel1f = -(vel1 * (m1 - m2) + 2.0 * m2 *  vel2) / (m1 + m2);
+                    let vel2f = (vel2 * (m2 - m1) + 2.0 * m1 *  vel1) / (m1 + m2);
+
+                    verlet1.set_position(verlet1.get_position() + collision_axis.normalize() * (min_dist - dist));
+                    verlet2.set_position(verlet2.get_position() -  collision_axis.normalize() * (min_dist - dist));
+
+
+                    verlet1.set_velocity(vel1f * coefficient_of_restitution, dt);
+                    verlet2.set_velocity(vel2f * coefficient_of_restitution, dt);
+                }
+            }
+        }
+    }
 
     pub fn get_positions(&self) -> Vec<Vec2> {
         self.verlets.iter()

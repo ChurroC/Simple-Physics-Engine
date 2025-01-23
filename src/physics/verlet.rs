@@ -1,4 +1,4 @@
-use macroquad::prelude::Vec2;
+use macroquad::{math::Vec4, prelude::Vec2, rand};
 
 #[derive(Clone, Debug)]
 pub struct Verlet {
@@ -9,6 +9,7 @@ pub struct Verlet {
     radius: f32,
     density: f32,
     last_dt: f32,
+    color: Vec4,
 }
 
 impl Verlet {
@@ -21,6 +22,7 @@ impl Verlet {
             radius: 10.0,
             density: 1.0,
             last_dt: 0.0,
+            color: Vec4::new(rand::rand() as u8 as f32, rand::rand() as u8 as f32, rand::rand() as u8 as f32, 1.0),
         }
     }
     
@@ -34,9 +36,14 @@ impl Verlet {
             radius: radius,
             density: 1.0,
             last_dt: 0.0,
+            color: Vec4::new(rand::rand() as u8 as f32, rand::rand() as u8 as f32, rand::rand() as u8 as f32, 1.0),
         }
     }
     
+    pub fn get_color(&self) -> Vec4 {
+        self.color
+    }
+
     pub fn get_radius(&self) -> f32 {
         self.radius
     }

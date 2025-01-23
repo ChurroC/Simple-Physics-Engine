@@ -20,8 +20,9 @@ async fn main() {
     let mut solver = Solver::new(
         &[
             Verlet::new(Vec2::new(screen_width / 2.0, screen_height / 2.0)),
+            Verlet::new(Vec2::new(screen_width / 2.0, 0.0)),
         ],
-        Vec2::new(0.0, 500.0),
+        Vec2::new(0.0, 100.0),
         Vec2::new(screen_width / 2.0, screen_height / 2.0),
         constraint_radius,
         substep,
@@ -57,7 +58,7 @@ async fn main() {
         // Draw all verlet objects
         for verlet in solver.get_verlets() {
             let (x, y) = verlet.get_position().into();
-            draw_circle(x, y, 10.0, BLUE);
+            draw_circle(x, y, 10.0,  Color::from_rgba(verlet.get_color().x as u8, verlet.get_color().y as u8, verlet.get_color().z as u8, 255));
             draw_arrow(verlet.get_position(), verlet.get_position() + verlet.get_velocity() / 5.0, ORANGE);
             draw_arrow(verlet.get_position(), verlet.get_position() + verlet.get_acceleration() / 10.0, RED);
         }
