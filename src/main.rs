@@ -22,13 +22,13 @@ async fn main() {
             Verlet::new(Vec2::new(screen_width / 2.0, screen_height / 2.0)),
             Verlet::new(Vec2::new(screen_width / 2.0, 0.0)),
         ],
-        Vec2::new(0.0, 100.0),
+        Vec2::new(0.0, 70.0),
         Vec2::new(screen_width / 2.0, screen_height / 2.0),
         constraint_radius,
         substep,
     );
 
-    let fixed_dt = 1.0 / 60.0;  // Fixed 60 FPS physics update
+    let fixed_dt = 1.0 / 30.0;  // Fixed 60 FPS physics update
     let mut accumulator = 0.0;
     let mut last_time = get_time();
     

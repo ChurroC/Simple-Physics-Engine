@@ -64,7 +64,7 @@ impl Solver {
 
     fn solve_collisions(&mut self, dt: f32) {
         let verlet_count = self.verlets.len();
-        let coefficient_of_restitution = 1.0;
+        let coefficient_of_restitution = 0.75;
 
         for i in 0..verlet_count {
             for j in i + 1..verlet_count {
@@ -77,20 +77,26 @@ impl Solver {
                 let min_dist = verlet1.get_radius() + verlet2.get_radius();
 
                 if dist < min_dist {
-                    let vel1 = verlet1.get_velocity().project_onto(collision_axis);
-                    let vel2 = verlet2.get_velocity().project_onto(collision_axis);
+                    let collision_normal = collision_axis.normalize();
+                    let collision_perp_normal = collision_axis.perp().normalize();
+                    let overlap = min_dist - dist;
+                    
+                    let vel1 = verlet1.get_velocity().project_onto(collision_normal);
+                    let vel1_perp = verlet1.get_velocity().project_onto(collision_perp_normal);
+                    let vel2 = verlet2.get_velocity().project_onto(collision_normal);
+                    let vel2_perp = verlet2.get_velocity().project_onto(collision_perp_normal);
                     let m1 = verlet1.get_mass();
                     let m2 = verlet2.get_mass();
 
-                    let vel1f = -(vel1 * (m1 - m2) + 2.0 * m2 *  vel2) / (m1 + m2);
+                    let vel1f = (vel1 * (m1 - m2) + 2.0 * m2 *  vel2) / (m1 + m2);
                     let vel2f = (vel2 * (m2 - m1) + 2.0 * m1 *  vel1) / (m1 + m2);
 
-                    verlet1.set_position(verlet1.get_position() + collision_axis.normalize() * (min_dist - dist));
-                    verlet2.set_position(verlet2.get_position() -  collision_axis.normalize() * (min_dist - dist));
+                    verlet1.set_position(verlet1.get_position() + collision_normal * overlap / 2.0);
+                    verlet2.set_position(verlet2.get_position() -  collision_normal * overlap / 2.0);
 
-
-                    verlet1.set_velocity(vel1f * coefficient_of_restitution, dt);
-                    verlet2.set_velocity(vel2f * coefficient_of_restitution, dt);
+                    // Subtracting final and intial vel can give the changes axis
+                    verlet1.set_velocity((vel1_perp + vel1f) * coefficient_of_restitution, dt);
+                    verlet2.set_velocity((vel2_perp + vel2f) * coefficient_of_restitution, dt);
                 }
             }
         }
