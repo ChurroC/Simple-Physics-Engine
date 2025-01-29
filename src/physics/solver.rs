@@ -6,28 +6,24 @@ pub struct Solver {
     gravity: Vec2,
     constraint_center: Vec2,
     constraint_radius: f32,
-    substep: u32,
 }
 
+
 impl Solver {
-    pub fn new(verlets: &[Verlet], gravity: Vec2, constraint_center: Vec2, constraint_radius: f32, substep: u32) -> Self {
+    pub fn new(verlets: &[Verlet], gravity: Vec2, constraint_center: Vec2, constraint_radius: f32) -> Self {
         Solver {
             verlets: verlets.iter().cloned().collect(),
             gravity,
             constraint_center,
             constraint_radius,
-            substep
         }
     }
 
     pub fn update(&mut self, dt: f32) {
-        let substep_dt = dt / self.substep as f32;
-        for _ in 0..self.substep {
-            self.apply_gravity();
-            self.apply_constraints(substep_dt);
-            self.solve_collisions(substep_dt);
-            self.update_positions(substep_dt);
-        }
+        self.apply_gravity();
+        self.apply_constraints(dt);
+        self.solve_collisions(dt);
+        self.update_positions(dt);
     }
 
     fn update_positions(&mut self, dt: f32) {
@@ -94,7 +90,7 @@ impl Solver {
                     verlet1.set_position(verlet1.get_position() + collision_normal * overlap / 2.0);
                     verlet2.set_position(verlet2.get_position() -  collision_normal * overlap / 2.0);
 
-                    // Subtracting final and intial vel can give the changes axis
+                    // keeping the perp vel same and changing the collision vel
                     verlet1.set_velocity((vel1_perp + vel1f) * coefficient_of_restitution, dt);
                     verlet2.set_velocity((vel2_perp + vel2f) * coefficient_of_restitution, dt);
                 }
@@ -108,16 +104,11 @@ impl Solver {
             .collect()
     }
 
-    pub fn add_position(&mut self, position: Vec2) {
-        self.verlets.push(Verlet::new(position));
+    pub fn add_position(&mut self, verlet: Verlet) {
+        self.verlets.push(verlet);
     }
-    pub fn add_positions(&mut self, positions: &[Vec2]) {
-        let new_verlets = positions
-            .iter()
-            .map(|&pos| Verlet::new(pos))
-            .collect::<Vec<Verlet>>();
-            
-        self.verlets.extend(new_verlets);
+    pub fn add_positions(&mut self, verlets: &[Verlet]) {
+        self.verlets.extend(verlets.iter().cloned());
     }
 
     pub fn get_verlets(&self) -> &Vec<Verlet> {

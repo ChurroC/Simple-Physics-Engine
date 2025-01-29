@@ -16,52 +16,47 @@ async fn main() {
     // Calculate constraint radius
     let constraint_radius = screen_height.min(screen_width) / 2.0 - 50.0;
 
-    let substep = 8;
     let mut solver = Solver::new(
         &[
             Verlet::new(Vec2::new(screen_width / 2.0, screen_height / 2.0)),
             Verlet::new(Vec2::new(screen_width / 2.0, 0.0)),
         ],
-        Vec2::new(0.0, 70.0),
+        Vec2::new(0.0, 100.0),
         Vec2::new(screen_width / 2.0, screen_height / 2.0),
         constraint_radius,
-        substep,
     );
 
-    let fixed_dt = 1.0 / 30.0;  // Fixed 60 FPS physics update
+    let dt = 1.0 / 20.0;  // Fixed 60 FPS physics update - With 8 subdivisions
     let mut accumulator = 0.0;
-    let mut last_time = get_time();
+    let mut last_time: f64 = get_time();
     
     loop {
         let current_time = get_time();
         let frame_time = (current_time - last_time) as f32;
         last_time = current_time;
-        
         accumulator += frame_time;
+        
+        if is_mouse_button_pressed(MouseButton::Left) {
+            solver.add_position(Verlet::new(Vec2::new(mouse_position().0, mouse_position().1)));  // Add new position at mouse position
+        }
+
+        // solver.add_position(Verlet::new(Vec2::new(screen_width / 2.0, screen_height / 2.0)));
+        while accumulator >= dt {
+            solver.update(dt);
+            accumulator -= dt;
+        }
         
         clear_background(BLACK);
         draw_circle_lines(screen_width / 2.0, screen_height / 2.0, constraint_radius, 1.0, WHITE);  // Draw constraint circle
-
-        if is_mouse_button_pressed(MouseButton::Left) {
-            solver.add_position(Vec2::new(mouse_position().0, mouse_position().1));  // Add new position at mouse position
-        }
-
-        
-        // Update physics with fixed timestep, might run multiple times per frame
-        while accumulator >= fixed_dt {
-            solver.update(fixed_dt);
-            accumulator -= fixed_dt;
-        }
-
-
-    
-        // Draw all verlet objects
         for verlet in solver.get_verlets() {
             let (x, y) = verlet.get_position().into();
             draw_circle(x, y, 10.0,  Color::from_rgba(verlet.get_color().x as u8, verlet.get_color().y as u8, verlet.get_color().z as u8, 255));
             draw_arrow(verlet.get_position(), verlet.get_position() + verlet.get_velocity() / 5.0, ORANGE);
-            draw_arrow(verlet.get_position(), verlet.get_position() + verlet.get_acceleration() / 10.0, RED);
+            draw_arrow(verlet.get_position(), verlet.get_position() + verlet.get_acceleration() / 5.0, RED);
         }
+
+
+    
 
         // Enhanced debug display
         draw_text(
