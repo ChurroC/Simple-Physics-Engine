@@ -1,4 +1,4 @@
-use macroquad::{math::Vec4, prelude::Vec2, rand};
+use macroquad::{math::{Vec4}, prelude::Vec2, rand};
 
 #[derive(Clone, Debug)]
 pub struct Verlet {
@@ -26,7 +26,7 @@ impl Verlet {
         }
     }
     
-    pub fn new_radius(position: Vec2, radius: f32) -> Self {
+    pub fn new_with_radius(position: Vec2, radius: f32) -> Self {
         let radius = radius.into();
         Verlet {
             position,
@@ -36,6 +36,20 @@ impl Verlet {
             radius: radius,
             density: 1.0,
             last_dt: 0.0,
+            color: Vec4::new(rand::rand() as u8 as f32, rand::rand() as u8 as f32, rand::rand() as u8 as f32, 1.0),
+        }
+    }
+
+    
+    pub fn new_with_velocity(position: Vec2, velocity: Vec2, dt: f32) -> Self {
+        Verlet {
+            position,
+            last_position: position - velocity * dt,  // Set this directly
+            acceleration: Vec2::ZERO,
+            last_acceleration: Vec2::ZERO,
+            radius: 10.0,
+            density: 1.0,
+            last_dt: dt, // Set this directly
             color: Vec4::new(rand::rand() as u8 as f32, rand::rand() as u8 as f32, rand::rand() as u8 as f32, 1.0),
         }
     }
