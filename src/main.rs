@@ -26,7 +26,8 @@ async fn main() {
         constraint_radius,
     );
 
-    let dt = 1.0 / 60.0 / 8.0;  // Fixed 60 FPS physics update - With 8 subdivisions
+    let dt = 1.0 / 60.0 / 1.0;  // Fixed 60 FPS physics update - With 8 subdivisions
+    println!("dt: {dt}");
     let mut accumulator = 0.0;
     // let mut ball_drop_accumulator = 0.0;
     let mut last_time: f64 = get_time();
@@ -36,7 +37,7 @@ async fn main() {
         let frame_time = (current_time - last_time) as f32;
         last_time = current_time;
         accumulator += frame_time;
-        ball_drop_accumulator += frame_time;
+        // ball_drop_accumulator += frame_time;
         
         if is_mouse_button_pressed(MouseButton::Left) {
             solver.add_position(Verlet::new(Vec2::new(mouse_position().0, mouse_position().1)));  // Add new position at mouse position
@@ -56,11 +57,27 @@ async fn main() {
         
         clear_background(BLACK);
         draw_circle_lines(screen_width / 2.0, screen_height / 2.0, constraint_radius, 1.0, WHITE);  // Draw constraint circle
+        
+        let alpha = accumulator / dt;
         for verlet in solver.get_verlets() {
+            let interpolated_pos = verlet.get_interpolated_position(alpha);
             let (x, y) = verlet.get_position().into();
-            draw_circle(x, y, 10.0,  Color::from_rgba(verlet.get_color().x as u8, verlet.get_color().y as u8, verlet.get_color().z as u8, 255));
-            draw_arrow(verlet.get_position(), verlet.get_position() + verlet.get_velocity() / 5.0, ORANGE);
-            draw_arrow(verlet.get_position(), verlet.get_position() + verlet.get_acceleration() / 5.0, RED);
+            draw_circle(x, y, 10.0, Color::from_rgba(
+                verlet.get_color().x as u8,
+                verlet.get_color().y as u8,
+                verlet.get_color().z as u8,
+                255
+            ));
+            draw_arrow(
+                interpolated_pos,
+                interpolated_pos + verlet.get_velocity() / 5.0,
+                ORANGE
+            );
+            draw_arrow(
+                interpolated_pos,
+                interpolated_pos + verlet.get_acceleration() / 5.0,
+                RED
+            );
         }
 
 
