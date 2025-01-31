@@ -20,13 +20,14 @@ async fn main() {
         &[
             Verlet::new(Vec2::new(screen_width / 2.0, screen_height / 2.0)),
             Verlet::new(Vec2::new(screen_width / 2.0, 0.0)),
+            Verlet::new(Vec2::new(screen_width / 2.0, 200.0)),
         ],
         Vec2::new(0.0, 100.0),
         Vec2::new(screen_width / 2.0, screen_height / 2.0),
         constraint_radius,
     );
 
-    let dt = 1.0 / 60.0 / 1.0;  // Fixed 60 FPS physics update - With 8 subdivisions
+    let dt = 1.0 / 60.0 / 10.0;  // Fixed 60 FPS physics update - With 8 subdivisions
     println!("dt: {dt}");
     let mut accumulator = 0.0;
     // let mut ball_drop_accumulator = 0.0;
@@ -62,7 +63,7 @@ async fn main() {
         for verlet in solver.get_verlets() {
             let interpolated_pos = verlet.get_interpolated_position(alpha);
             let (x, y) = verlet.get_position().into();
-            draw_circle(x, y, 10.0, Color::from_rgba(
+            draw_circle(x, y, verlet.get_radius(), Color::from_rgba(
                 verlet.get_color().x as u8,
                 verlet.get_color().y as u8,
                 verlet.get_color().z as u8,
@@ -79,9 +80,6 @@ async fn main() {
                 RED
             );
         }
-
-
-    
 
         // Enhanced debug display
         draw_text(
@@ -107,7 +105,7 @@ fn draw_arrow(start: Vec2, end: Vec2, color: Color) {
 
     // Calculate the points for the arrowhead
     let arrowhead_length = 10.0;
-    let arrowhead_angle = 30.0f32.to_radians();
+    let arrowhead_angle = (30.0 as f32).to_radians();
 
     let left_arrowhead = Vec2::new(
         end.x - arrowhead_length * (direction.x * arrowhead_angle.cos() - direction.y * arrowhead_angle.sin()),
