@@ -107,7 +107,6 @@ impl Verlet {
         self.last_position = self.position;
         
         self.position = self.position + displacement + self.acceleration * dt * dt;
-        println!("position: {:?}", self.position);
 
         self.last_acceleration = self.acceleration;
         self.last_dt = dt;

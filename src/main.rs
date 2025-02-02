@@ -25,15 +25,17 @@ async fn main() {
         constraint_radius,
     );
 
-    let dt = 1.0 / 60.0 / 1.0;  // Fixed 60 FPS physics update - With 8 subdivisions
+    let dt = 1.0 / 60.0 / 4.0;  // Fixed 60 FPS physics update - With 8 subdivisions
     println!("dt: {dt}");
     let mut accumulator = 0.0;
     let mut ball_drop_accumulator = 0.0;
     let mut last_time: f64 = get_time();
 
     // This is too force the simulation forward
-    for _ in 0..(1000 * 8) {
-        // solver.update(dt);
+    for _ in 0..(300) {
+        solver.update(dt);
+        solver.add_position(Verlet::new_with_velocity(Vec2::new(1.0/2.2 * screen_width, screen_height / 8.0),
+        Vec2::new(0.0, 200.0), dt));
     }
     
     loop {
@@ -47,14 +49,15 @@ async fn main() {
             solver.add_position(Verlet::new(Vec2::new(mouse_position().0, mouse_position().1)));  // Add new position at mouse position
         }
         
-        if ball_drop_accumulator >= 0.25 {
+        if ball_drop_accumulator >= 0.1 && !solver.is_container_full() {
             // let angle = rand::gen_range(0.0, std::f32::consts::TAU);
             // solver.add_position(Verlet::new_with_velocity(Vec2::new(screen_width / 2.0, screen_height / 2.0),
             //         500.0 * Vec2::new(angle.cos(), angle.sin()), dt));
-            // solver.add_position(Verlet::new_with_velocity(Vec2::new(3.0/4.0 * screen_width, screen_height / 2.0),
-            //         Vec2::new(0.0, 200.0), dt));
+            solver.add_position(Verlet::new_with_velocity(Vec2::new(1.0/2.2 * screen_width, screen_height / 8.0),
+                    Vec2::new(0.0, 200.0), dt));
 
             ball_drop_accumulator = 0.0;
+            println!("{}", solver.is_container_full());
         }
 
         while accumulator >= dt {
@@ -68,30 +71,31 @@ async fn main() {
         let alpha = accumulator / dt;
         for verlet in solver.get_verlets() {
             let interpolated_pos = verlet.get_interpolated_position(alpha);
-            let (x, y) = verlet.get_position().into();
+            let (x, y) = interpolated_pos.into();
             draw_circle(x, y, verlet.get_radius(), Color::from_rgba(
                 verlet.get_color().x as u8,
                 verlet.get_color().y as u8,
                 verlet.get_color().z as u8,
                 255
             ));
-            draw_arrow(
-                interpolated_pos,
-                interpolated_pos + verlet.get_velocity() / 5.0,
-                ORANGE
-            );
-            draw_arrow(
-                interpolated_pos,
-                interpolated_pos + verlet.get_acceleration() / 5.0,
-                RED
-            );
+            // draw_arrow(
+            //     interpolated_pos,
+            //     interpolated_pos + verlet.get_velocity() / 5.0,
+            //     ORANGE
+            // );
+            // draw_arrow(
+            //     interpolated_pos,
+            //     interpolated_pos + verlet.get_acceleration() / 5.0,
+            //     RED
+            // );
         }
 
         // Enhanced debug display
         draw_text(
             &format!(
-                "FPS: {}", 
+                "FPS: {} Verlets: {}", 
                 get_fps(),
+                solver.get_verlets().len(),
             ),
             20.0,
             30.0,

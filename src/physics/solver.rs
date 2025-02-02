@@ -21,7 +21,7 @@ impl Solver {
 
     pub fn update(&mut self, dt: f32) {
         self.apply_gravity();
-        self.apply_constraints_smooth(dt);
+        self.apply_constraints(dt);
         let collisions = self.find_collisions_loop();
         self.solve_collisions(collisions, dt);
         self.update_positions(dt);
@@ -139,6 +139,22 @@ impl Solver {
                 verlet2.set_velocity((vel2_perp + vel2f) * coefficient_of_restitution, dt);
             }
         }
+    }
+
+    pub fn is_container_full(&self) -> bool {
+        // Calculate total area of particles
+        let total_particle_area: f32 = self.verlets
+            .iter()
+            .map(|v| std::f32::consts::PI * v.get_radius() * v.get_radius())
+            .sum();
+        
+        // Calculate container area
+        let container_area = std::f32::consts::PI * self.constraint_radius * self.constraint_radius;
+        
+        // Consider it full if particles take up more than X% of space
+        // Note: Perfect circle packing is ~90.7% efficient
+        let density = total_particle_area / container_area;
+        density > 0.87 // or whatever threshold makes sense
     }
 
     pub fn get_positions(&self) -> Vec<Vec2> {
