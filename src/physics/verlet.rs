@@ -1,8 +1,9 @@
 use glam::{Vec2, Vec4};
+use serde::{Serialize, Deserialize};
 use rand::Rng;
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Verlet {
     position: Vec2,
     last_position: Vec2,

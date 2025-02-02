@@ -1,7 +1,9 @@
-use glam::{Vec2, Vec4};
 use super::verlet::Verlet;
+use glam::{Vec2, Vec4};
+use serde::{Serialize, Deserialize};
 use bincode;
 
+#[derive(Serialize, Deserialize)]
 pub struct Solver {
     verlets: Vec<Verlet>,
     gravity: Vec2,
