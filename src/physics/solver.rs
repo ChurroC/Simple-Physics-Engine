@@ -21,7 +21,7 @@ impl Solver {
 
     pub fn update(&mut self, dt: f32) {
         self.apply_gravity();
-        self.apply_constraints(dt);
+        self.apply_constraints_smooth(dt);
         let collisions = self.find_collisions_loop();
         self.solve_collisions(collisions, dt);
         self.update_positions(dt);
@@ -39,20 +39,46 @@ impl Solver {
         }
     }
 
-    fn apply_constraints(&mut self, dt: f32) {
+    // Pezzas way but even more accurate
+    // Since his way of moving position creates a velocity spike
+    // When just loses the normal velocity and keep the tangential velocity
+    fn apply_constraints_smooth(&mut self, dt: f32) {
+        let coefficient_of_restitution = 1.0;
+
         for verlet in &mut self.verlets {
-            let dist_to_vert = verlet.get_position() - self.constraint_center; // Or distance to verlet from center
-            let dist = dist_to_vert.length();
+            let dist_to_cen = verlet.get_position() - self.constraint_center; // Or distance to verlet from center
+            let dist = dist_to_cen.length();
             
             if dist > self.constraint_radius - verlet.get_radius() {
-                let unit_normal = dist_to_vert.normalize();
+                let dist_mag: Vec2 = dist_to_cen.normalize();
 
                 let vel = verlet.get_velocity();
-                let v_normal = vel.project_onto(unit_normal);
+                let v_norm = vel.project_onto(dist_mag);
 
-                let correct_position = self.constraint_center + unit_normal * (self.constraint_radius - verlet.get_radius());
+                let correct_position = self.constraint_center + dist_mag * (self.constraint_radius - verlet.get_radius());
                 verlet.set_position(correct_position);
-                verlet.set_velocity( vel - 2.0 * v_normal, dt); // Just push the portion normal to the wall inverse
+                verlet.set_velocity( (vel - v_norm) * coefficient_of_restitution, dt); // Just push the portion normal to the wall inverse
+            }
+        }
+    }
+
+    // More accurate bounce
+    fn apply_constraints(&mut self, dt: f32) {
+        let coefficient_of_restitution = 1.0;
+
+        for verlet in &mut self.verlets {
+            let dist_to_cen = verlet.get_position() - self.constraint_center; // Or distance to verlet from center
+            let dist = dist_to_cen.length();
+            
+            if dist > self.constraint_radius - verlet.get_radius() {
+                let dist_mag = dist_to_cen.normalize();
+
+                let vel = verlet.get_velocity();
+                let v_norm = vel.project_onto(dist_mag);
+
+                let correct_position = self.constraint_center + dist_mag * (self.constraint_radius - verlet.get_radius());
+                verlet.set_position(correct_position);
+                verlet.set_velocity( (vel - 2.0 * v_norm) * coefficient_of_restitution, dt); // Just push the portion normal to the wall inverse
             }
         }
     }
@@ -79,7 +105,7 @@ impl Solver {
     }
 
     fn solve_collisions(&mut self, collisions: Vec<(usize, usize)>, dt: f32) {
-        let coefficient_of_restitution = 1.0;
+        let coefficient_of_restitution = 0.93;
 
         for (i, j) in collisions {
             let (left, right) = self.verlets.split_at_mut(j);

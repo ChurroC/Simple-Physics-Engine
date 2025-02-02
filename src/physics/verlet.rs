@@ -92,7 +92,6 @@ impl Verlet {
 
     pub fn set_position(&mut self, position: Vec2) {
         self.position = position;
-        self.last_position = position;
     }
 
     pub fn get_acceleration(&self) -> Vec2 {
@@ -104,11 +103,12 @@ impl Verlet {
     }
 
     pub fn update_position(&mut self, dt: f32){
-        let current_position = self.position;
+        let displacement = self.position - self.last_position;
+        self.last_position = self.position;
         
-        self.position = 2.0 * current_position - self.last_position + self.acceleration * dt * dt;
+        self.position = self.position + displacement + self.acceleration * dt * dt;
+        println!("position: {:?}", self.position);
 
-        self.last_position = current_position;
         self.last_acceleration = self.acceleration;
         self.last_dt = dt;
         self.acceleration = Vec2::ZERO; // Reset acceleration applied at this frame

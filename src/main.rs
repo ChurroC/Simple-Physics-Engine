@@ -18,38 +18,44 @@ async fn main() {
 
     let mut solver = Solver::new(
         &[
-            Verlet::new(Vec2::new(screen_width / 2.0, screen_height / 2.0)),
-            Verlet::new(Vec2::new(screen_width / 2.0, 0.0)),
-            Verlet::new(Vec2::new(screen_width / 2.0, 200.0)),
+            Verlet::new(Vec2::new(3.0/4.0 * screen_width / 2.0, screen_height / 2.0)),
         ],
-        Vec2::new(0.0, 100.0),
+        Vec2::new(0.0, 200.0),
         Vec2::new(screen_width / 2.0, screen_height / 2.0),
         constraint_radius,
     );
 
-    let dt = 1.0 / 60.0 / 10.0;  // Fixed 60 FPS physics update - With 8 subdivisions
+    let dt = 1.0 / 60.0 / 1.0;  // Fixed 60 FPS physics update - With 8 subdivisions
     println!("dt: {dt}");
     let mut accumulator = 0.0;
-    // let mut ball_drop_accumulator = 0.0;
+    let mut ball_drop_accumulator = 0.0;
     let mut last_time: f64 = get_time();
+
+    // This is too force the simulation forward
+    for _ in 0..(1000 * 8) {
+        // solver.update(dt);
+    }
     
     loop {
         let current_time = get_time();
         let frame_time = (current_time - last_time) as f32;
         last_time = current_time;
         accumulator += frame_time;
-        // ball_drop_accumulator += frame_time;
+        ball_drop_accumulator += frame_time;
         
         if is_mouse_button_pressed(MouseButton::Left) {
             solver.add_position(Verlet::new(Vec2::new(mouse_position().0, mouse_position().1)));  // Add new position at mouse position
         }
         
-        // if ball_drop_accumulator >= 0.1 {
-        //     let angle = rand::gen_range(0.0, std::f32::consts::TAU);
-        //     solver.add_position(Verlet::new_with_velocity(Vec2::new(screen_width / 2.0, screen_height / 2.0),
-        //             500.0 * Vec2::new(angle.cos(), angle.sin()), dt));
-        //     ball_drop_accumulator = 0.0;
-        // }
+        if ball_drop_accumulator >= 0.25 {
+            // let angle = rand::gen_range(0.0, std::f32::consts::TAU);
+            // solver.add_position(Verlet::new_with_velocity(Vec2::new(screen_width / 2.0, screen_height / 2.0),
+            //         500.0 * Vec2::new(angle.cos(), angle.sin()), dt));
+            // solver.add_position(Verlet::new_with_velocity(Vec2::new(3.0/4.0 * screen_width, screen_height / 2.0),
+            //         Vec2::new(0.0, 200.0), dt));
+
+            ball_drop_accumulator = 0.0;
+        }
 
         while accumulator >= dt {
             solver.update(dt);
