@@ -1,4 +1,6 @@
-use macroquad::{math::{Vec4}, prelude::Vec2, rand};
+use glam::{Vec2, Vec4};
+use rand::Rng;
+
 
 #[derive(Clone, Debug)]
 pub struct Verlet {
@@ -14,6 +16,8 @@ pub struct Verlet {
 
 impl Verlet {
     pub fn new(position: Vec2) -> Self {
+        let mut rng = rand::thread_rng();
+
         Verlet {
             position,
             last_position: position,
@@ -22,11 +26,11 @@ impl Verlet {
             radius: 10.0,
             density: 1.0,
             last_dt: 0.0,
-            color: Vec4::new(rand::gen_range(0.0, 256.0), rand::gen_range(0.0, 256.0), rand::gen_range(0.0, 256.0), 1.0),
+            color: Vec4::new(rng.gen_range(0.0..256.0), rng.gen_range(0.0..256.0), rng.gen_range(0.0..256.0), 1.0),
         }
     }
-    
     pub fn new_with_radius(position: Vec2, radius: f32) -> Self {
+        let mut rng = rand::thread_rng();
         let radius = radius.into();
         Verlet {
             position,
@@ -36,12 +40,11 @@ impl Verlet {
             radius: radius,
             density: 1.0,
             last_dt: 0.0,
-            color: Vec4::new(rand::gen_range(0.0, 256.0), rand::gen_range(0.0, 256.0), rand::gen_range(0.0, 256.0), 1.0),
+            color: Vec4::new(rng.gen_range(0.0..256.0), rng.gen_range(0.0..256.0), rng.gen_range(0.0..256.0), 1.0),
         }
     }
-
-    
     pub fn new_with_velocity(position: Vec2, velocity: Vec2, dt: f32) -> Self {
+        let mut rng = rand::thread_rng();
         Verlet {
             position,
             last_position: position - velocity * dt,  // Set this directly
@@ -50,12 +53,16 @@ impl Verlet {
             radius: 10.0,
             density: 1.0,
             last_dt: dt, // Set this directly
-            color: Vec4::new(rand::gen_range(0.0, 256.0), rand::gen_range(0.0, 256.0), rand::gen_range(0.0, 256.0), 1.0),
+            color: Vec4::new(rng.gen_range(0.0..256.0), rng.gen_range(0.0..256.0), rng.gen_range(0.0..256.0), 1.0),
         }
     }
     
     pub fn get_color(&self) -> Vec4 {
         self.color
+    }
+    
+    pub fn set_color(&mut self, color: Vec4) {
+        self.color = color;
     }
 
     pub fn get_radius(&self) -> f32 {

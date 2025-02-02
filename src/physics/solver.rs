@@ -1,5 +1,6 @@
-use macroquad::prelude::Vec2;
+use glam::{Vec2, Vec4};
 use super::verlet::Verlet;
+use bincode;
 
 pub struct Solver {
     verlets: Vec<Verlet>,
@@ -156,6 +157,48 @@ impl Solver {
         let density = total_particle_area / container_area;
         density > 0.87 // or whatever threshold makes sense
     }
+    
+    pub fn apply_rainbow_gradient(&mut self) {
+        // Sort verlets by y position (from bottom to top)
+        let mut sorted_indices: Vec<usize> = (0..self.verlets.len()).collect();
+        sorted_indices.sort_by(|&a, &b| {
+            self.verlets[b].get_position().y
+                .partial_cmp(&self.verlets[a].get_position().y)
+                .unwrap()
+        });
+
+        // Define rainbow colors (from bottom to top)
+        let colors = [
+            Vec4::new(255.0, 0.0, 0.0, 1.0),    // Red
+            Vec4::new(255.0, 127.0, 0.0, 1.0),  // Orange
+            Vec4::new(255.0, 255.0, 0.0, 1.0),  // Yellow
+            Vec4::new(0.0, 255.0, 0.0, 1.0),    // Green
+            Vec4::new(0.0, 0.0, 255.0, 1.0),    // Blue
+            Vec4::new(75.0, 0.0, 130.0, 1.0),   // Indigo
+            Vec4::new(148.0, 0.0, 211.0, 1.0),  // Violet
+        ];
+
+        // Update colors based on position
+        let total_verlets = sorted_indices.len() as f32;
+        for (i, &idx) in sorted_indices.iter().enumerate() {
+            let progress = i as f32 / total_verlets;
+            let color_index = (progress * (colors.len() - 1) as f32) as usize;
+            let next_color_index = (color_index + 1).min(colors.len() - 1);
+            let color_progress = (progress * (colors.len() - 1) as f32) - color_index as f32;
+
+            // Interpolate between colors
+            let start_color = colors[color_index];
+            let end_color = colors[next_color_index];
+            let interpolated_color = Vec4::new(
+                start_color.x + (end_color.x - start_color.x) * color_progress,
+                start_color.y + (end_color.y - start_color.y) * color_progress,
+                start_color.z + (end_color.z - start_color.z) * color_progress,
+                1.0
+            );
+
+            self.verlets[idx].set_color(interpolated_color);
+        }
+    }
 
     pub fn get_positions(&self) -> Vec<Vec2> {
         self.verlets.iter()
@@ -172,6 +215,19 @@ impl Solver {
 
     pub fn get_verlets(&self) -> &Vec<Verlet> {
         &self.verlets
+    }
+
+
+    pub fn save_state(&self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let encoded = bincode::serialize(&self)?;
+        std::fs::write(filename, encoded)?;
+        Ok(())
+    }
+
+    pub fn load_state(filename: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let data = std::fs::read(filename)?;
+        let solver = bincode::deserialize(&data)?;
+        Ok(solver)
     }
 
 }

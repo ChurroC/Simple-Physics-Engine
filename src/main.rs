@@ -1,11 +1,13 @@
 #![allow(dead_code)]
-use macroquad::prelude::*;
+use macroquad::prelude::{clear_background, draw_circle, draw_circle_lines, get_time, is_key_pressed, is_mouse_button_down, mouse_position, next_frame, screen_height, screen_width, draw_text, draw_line, BLACK, Color, MouseButton, KeyCode, WHITE};
+use glam::Vec2;
 
 mod physics {
     pub mod solver;
     pub mod verlet;  // Make sure to add this!
 }
 use physics::{solver::Solver, verlet::Verlet};
+
 
 #[macroquad::main("Game")]
 async fn main() {
@@ -25,31 +27,58 @@ async fn main() {
         constraint_radius,
     );
 
-    let dt = 1.0 / 60.0 / 4.0;  // Fixed 60 FPS physics update - With 8 subdivisions
-    println!("dt: {dt}");
-    let mut accumulator = 0.0;
-    let mut ball_drop_accumulator = 0.0;
+    let dt = 1.0 / 60.0 / 3.0;  // Fixed 60 FPS physics update - With 8 subdivisions
+    let ball_drop_dt = 0.1;
+    let mouse_drop_dt = 0.1;
+    let (mut accumulator, mut ball_drop_accumulator,mut mouse_drop_accumulator)  = (0.0, 0.0, 0.0);
+
     let mut last_time: f64 = get_time();
 
     // This is too force the simulation forward
-    for _ in 0..(300) {
-        solver.update(dt);
-        solver.add_position(Verlet::new_with_velocity(Vec2::new(1.0/2.2 * screen_width, screen_height / 8.0),
-        Vec2::new(0.0, 200.0), dt));
-    }
+    // for _ in 0..((45.0 / dt) as i32) {
+    //     solver.update(dt);
+        
+    //     ball_drop_accumulator += dt;
+    //     if ball_drop_accumulator >= ball_drop_dt && !solver.is_container_full() {
+    //         solver.add_position(Verlet::new_with_velocity(Vec2::new(1.0/2.2 * screen_width, screen_height / 8.0),
+    //                 Vec2::new(0.0, 200.0), dt));
+
+    //         ball_drop_accumulator = 0.0;
+    //     }
+    // }
     
     loop {
         let current_time = get_time();
         let frame_time = (current_time - last_time) as f32;
         last_time = current_time;
+        
         accumulator += frame_time;
         ball_drop_accumulator += frame_time;
+        mouse_drop_accumulator += frame_time;
         
-        if is_mouse_button_pressed(MouseButton::Left) {
-            solver.add_position(Verlet::new(Vec2::new(mouse_position().0, mouse_position().1)));  // Add new position at mouse position
+        if is_mouse_button_down(MouseButton::Left) {
+            if mouse_drop_accumulator >= mouse_drop_dt {
+                solver.add_position(Verlet::new(Vec2::new(mouse_position().0, mouse_position().1)));  // Add new position at mouse position
+                mouse_drop_accumulator = 0.0;
+            }
+        }
+
+        if is_key_pressed(KeyCode::S) {
+            if let Err(e) = solver.save_state("simulation_state.bin") {
+                println!("Failed to save state: {}", e);
+            }
         }
         
-        if ball_drop_accumulator >= 0.1 && !solver.is_container_full() {
+        if is_key_pressed(KeyCode::L) {
+            match Solver::load_state("simulation_state.bin") {
+                Ok(loaded_solver) => {
+                    solver = loaded_solver;
+                }
+                Err(e) => println!("Failed to load state: {}", e),
+            }
+        }
+        
+        if ball_drop_accumulator >= ball_drop_dt && !solver.is_container_full() {
             // let angle = rand::gen_range(0.0, std::f32::consts::TAU);
             // solver.add_position(Verlet::new_with_velocity(Vec2::new(screen_width / 2.0, screen_height / 2.0),
             //         500.0 * Vec2::new(angle.cos(), angle.sin()), dt));
@@ -63,6 +92,10 @@ async fn main() {
         while accumulator >= dt {
             solver.update(dt);
             accumulator -= dt;
+            
+            if solver.is_container_full() {
+                solver.apply_rainbow_gradient();
+            }
         }
         
         clear_background(BLACK);
@@ -93,12 +126,21 @@ async fn main() {
         // Enhanced debug display
         draw_text(
             &format!(
-                "FPS: {} Verlets: {}", 
+                "FPS: {}", 
                 get_fps(),
-                solver.get_verlets().len(),
             ),
             20.0,
             30.0,
+            30.0,
+            WHITE
+        );
+        draw_text(
+            &format!(
+                "Verlets: {}", 
+                solver.get_verlets().len(),
+            ),
+            20.0,
+            65.0,
             30.0,
             WHITE
         );
