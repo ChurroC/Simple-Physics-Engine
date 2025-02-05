@@ -1,6 +1,8 @@
 #![allow(dead_code)]
+use std::vec;
+
 use macroquad::prelude::{clear_background, draw_circle, draw_circle_lines, get_time, is_key_pressed, is_mouse_button_down, mouse_position, next_frame, screen_height, screen_width, draw_text, draw_line, get_fps, BLACK, Color, MouseButton, KeyCode, WHITE};
-use glam::Vec2;
+use glam::{vec2, Vec2};
 
 mod physics {
     pub mod solver;
@@ -20,10 +22,9 @@ async fn main() {
 
     let mut solver = Solver::new(
         &[
-            Verlet::new(Vec2::new(3.0/4.0 * screen_width / 2.0, screen_height / 2.0)),
+            Verlet::new(Vec2::new(0.0, 0.0)),
         ],
         Vec2::new(0.0, 200.0),
-        Vec2::new(screen_width / 2.0, screen_height / 2.0),
         constraint_radius,
     );
 
@@ -35,7 +36,7 @@ async fn main() {
     let mut last_time: f64 = get_time();
 
     // This is too force the simulation forward
-    // for _ in 0..((45.0 / dt) as i32) {
+    // for _ in 0..((15.0 / dt) as i32) {
     //     solver.update(dt);
         
     //     ball_drop_accumulator += dt;
@@ -58,14 +59,21 @@ async fn main() {
         
         if is_mouse_button_down(MouseButton::Left) {
             if mouse_drop_accumulator >= mouse_drop_dt {
-                solver.add_position(Verlet::new(Vec2::new(mouse_position().0, mouse_position().1)));  // Add new position at mouse position
+                println!("Mouse position: {:?}", mouse_position());
+                println!("Mouse position2: {:?}", vec2(screen_width / 2.0, screen_height / 2.0));
+                let position = vec2(mouse_position().0, mouse_position().1) -  vec2(screen_width / 2.0, screen_height / 2.0);
+                println!("Mouse position3: {:?}", position);
+                solver.add_position(Verlet::new(position));  // Add new position at mouse position
                 mouse_drop_accumulator = 0.0;
-            }
+            };
+            // solver.picture_color("churros.jpg", !vec(screen_width / 2, screen_height / 2));
         }
 
         if is_key_pressed(KeyCode::S) {
             if let Err(e) = solver.save_state("simulation_state.bin") {
                 println!("Failed to save state: {}", e);
+            } else {
+                println!("State saved successfully!");
             }
         }
         
@@ -73,6 +81,7 @@ async fn main() {
             match Solver::load_state("simulation_state.bin") {
                 Ok(loaded_solver) => {
                     solver = loaded_solver;
+                    println!("State loaded successfully!");
                 }
                 Err(e) => println!("Failed to load state: {}", e),
             }
@@ -82,11 +91,14 @@ async fn main() {
             // let angle = rand::gen_range(0.0, std::f32::consts::TAU);
             // solver.add_position(Verlet::new_with_velocity(Vec2::new(screen_width / 2.0, screen_height / 2.0),
             //         500.0 * Vec2::new(angle.cos(), angle.sin()), dt));
-            solver.add_position(Verlet::new_with_velocity(Vec2::new(1.0/2.2 * screen_width, screen_height / 8.0),
+            solver.add_position(Verlet::new_with_velocity(Vec2::new(0.15 * screen_width,0.0),
                     Vec2::new(0.0, 200.0), dt));
 
             ball_drop_accumulator = 0.0;
-            println!("{}", solver.is_container_full());
+            if solver.is_container_full() {
+                println!("{}", solver.is_container_full());
+                // solver.apply_rainbow_gradient();
+            }
         }
 
         while accumulator >= dt {
@@ -103,7 +115,9 @@ async fn main() {
         
         let alpha = accumulator / dt;
         for verlet in solver.get_verlets() {
-            let interpolated_pos = verlet.get_interpolated_position(alpha);
+            // This is since the solver imagines the ball at being shows at 0, 0
+            let origin = vec2(screen_width / 2.0, screen_height / 2.0);
+            let interpolated_pos = origin + verlet.get_interpolated_position(alpha);
             let (x, y) = interpolated_pos.into();
             draw_circle(x, y, verlet.get_radius(), Color::from_rgba(
                 verlet.get_color().x as u8,

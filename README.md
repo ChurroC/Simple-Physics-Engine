@@ -10,3 +10,11 @@ use vectors from std lib
 
 
 why use last dt for vel and accel
+
+
+TODO:
+Chains
+
+Fluid dynamics
+Rigid body dynamics
+Planet simulations

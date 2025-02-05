@@ -1,5 +1,5 @@
 use super::verlet::Verlet;
-use glam::{Vec2, Vec4};
+use glam::{vec2, Vec2, Vec4};
 use serde::{Serialize, Deserialize};
 use bincode;
 
@@ -7,17 +7,15 @@ use bincode;
 pub struct Solver {
     verlets: Vec<Verlet>,
     gravity: Vec2,
-    constraint_center: Vec2,
     constraint_radius: f32,
 }
 
 
 impl Solver {
-    pub fn new(verlets: &[Verlet], gravity: Vec2, constraint_center: Vec2, constraint_radius: f32) -> Self {
+    pub fn new(verlets: &[Verlet], gravity: Vec2, constraint_radius: f32) -> Self {
         Solver {
             verlets: verlets.iter().cloned().collect(),
             gravity,
-            constraint_center,
             constraint_radius,
         }
     }
@@ -47,9 +45,10 @@ impl Solver {
     // When just loses the normal velocity and keep the tangential velocity
     fn apply_constraints_smooth(&mut self, dt: f32) {
         let coefficient_of_restitution = 1.0;
+        let constraint_center= vec2(0.0, 0.0);
 
         for verlet in &mut self.verlets {
-            let dist_to_cen = verlet.get_position() - self.constraint_center; // Or distance to verlet from center
+            let dist_to_cen = verlet.get_position() - constraint_center; // Or distance to verlet from center
             let dist = dist_to_cen.length();
             
             if dist > self.constraint_radius - verlet.get_radius() {
@@ -58,7 +57,7 @@ impl Solver {
                 let vel = verlet.get_velocity();
                 let v_norm = vel.project_onto(dist_mag);
 
-                let correct_position = self.constraint_center + dist_mag * (self.constraint_radius - verlet.get_radius());
+                let correct_position = constraint_center + dist_mag * (self.constraint_radius - verlet.get_radius());
                 verlet.set_position(correct_position);
                 verlet.set_velocity( (vel - v_norm) * coefficient_of_restitution, dt); // Just push the portion normal to the wall inverse
             }
@@ -68,9 +67,10 @@ impl Solver {
     // More accurate bounce
     fn apply_constraints(&mut self, dt: f32) {
         let coefficient_of_restitution = 1.0;
+        let constraint_center= vec2(0.0, 0.0);
 
         for verlet in &mut self.verlets {
-            let dist_to_cen = verlet.get_position() - self.constraint_center; // Or distance to verlet from center
+            let dist_to_cen = verlet.get_position() - constraint_center; // Or distance to verlet from center
             let dist = dist_to_cen.length();
             
             if dist > self.constraint_radius - verlet.get_radius() {
@@ -79,7 +79,7 @@ impl Solver {
                 let vel = verlet.get_velocity();
                 let v_norm = vel.project_onto(dist_mag);
 
-                let correct_position = self.constraint_center + dist_mag * (self.constraint_radius - verlet.get_radius());
+                let correct_position = constraint_center + dist_mag * (self.constraint_radius - verlet.get_radius());
                 verlet.set_position(correct_position);
                 verlet.set_velocity( (vel - 2.0 * v_norm) * coefficient_of_restitution, dt); // Just push the portion normal to the wall inverse
             }
@@ -219,7 +219,6 @@ impl Solver {
         &self.verlets
     }
 
-
     pub fn save_state(&self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
         let encoded = bincode::serialize(&self)?;
         std::fs::write(filename, encoded)?;
@@ -232,4 +231,11 @@ impl Solver {
         Ok(solver)
     }
 
+    pub fn picture_color(&self, filename: &str, center: Vec2) -> Result<Vec<Vec4>, Box<dyn std::error::Error>> {
+        let data = std::fs::read(filename)?;
+        let verlet = & self.verlets[0];
+
+        print!("{:?}", data);
+        Ok(self.verlets.iter().map(|v| v.get_color()).collect())
+    }
 }
