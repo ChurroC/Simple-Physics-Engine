@@ -2,6 +2,7 @@ use super::verlet::Verlet;
 use glam::{vec2, Vec2, Vec4};
 use serde::{Serialize, Deserialize};
 use bincode;
+use image::GenericImageView;
 
 #[derive(Serialize, Deserialize)]
 pub struct Solver {
@@ -231,11 +232,65 @@ impl Solver {
         Ok(solver)
     }
 
-    pub fn picture_color(&self, filename: &str, center: Vec2) -> Result<Vec<Vec4>, Box<dyn std::error::Error>> {
-        let data = std::fs::read(filename)?;
-        let verlet = & self.verlets[0];
+    pub fn picture_color(&self, file_path: &str) -> Result<(), Box<dyn std::error::Error>>{
+        let img = image::open(file_path).expect("File not found!");
+        let verlet = &self.verlets[0];
 
-        print!("{:?}", data);
-        Ok(self.verlets.iter().map(|v| v.get_color()).collect())
+        // We need to map the image to verlet position??
+        // First porportionally how much is the image on the left 
+        let x_ratio = verlet.get_position().x / self.constraint_radius;
+        let y_ratio = verlet.get_position().y / self.constraint_radius;
+
+        for pixel in img.pixels() {
+            print!("{:?}", pixel);
+        }
+        Ok(())
+    }
+
+    pub fn color_from_image(&mut self, file_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let img = image::open(file_path)?;
+        
+        // Convert image to RGB format
+        let rgb_img = img.to_rgb8();
+        let (img_width, img_height) = rgb_img.dimensions();
+        
+        println!("Image loaded: {}x{}", img_width, img_height);
+        
+        // Since we're working with a circular constraint, map positions relative to the constraint
+        let constraint_center = vec2(0.0, 0.0);
+        
+        for verlet in &mut self.verlets {
+            let pos = verlet.get_position();
+            
+            // Map position relative to constraint
+            // Convert from -radius to +radius range to 0 to 1 range
+            let x_ratio = ((pos.x / self.constraint_radius) + 1.0) * 0.5;
+            let y_ratio = ((pos.y / self.constraint_radius) + 1.0) * 0.5;
+            
+            // Convert to pixel coordinates
+            let img_x = (x_ratio * (img_width - 1) as f32) as u32;
+            let img_y = ((1.0 - y_ratio) * (img_height - 1) as f32) as u32; // Flip Y to match image coordinates
+            
+            // Get pixel color at mapped position
+            let pixel = rgb_img.get_pixel(img_x, img_y);
+            
+            // Debug print some values
+            println!(
+                "Position: ({}, {}), Ratios: ({}, {}), Pixel: ({}, {}) Color: {:?}", 
+                pos.x, pos.y, x_ratio, y_ratio, img_x, img_y, pixel
+            );
+            
+            // Create Vec4 with correct scaling (RGB values are 0-255, we need 0-1)
+            let color = Vec4::new(
+                pixel[0] as f32 / 255.0,
+                pixel[1] as f32 / 255.0,
+                pixel[2] as f32 / 255.0,
+                1.0
+            );
+            
+            verlet.set_color(color * 255.0); // Multiply by 255 since the game might expect 0-255 range
+        }
+        
+        Ok(())
     }
 }
