@@ -232,21 +232,6 @@ impl Solver {
         Ok(solver)
     }
 
-    pub fn picture_color(&self, file_path: &str) -> Result<(), Box<dyn std::error::Error>>{
-        let img = image::open(file_path).expect("File not found!");
-        let verlet = &self.verlets[0];
-
-        // We need to map the image to verlet position??
-        // First porportionally how much is the image on the left 
-        let x_ratio = verlet.get_position().x / self.constraint_radius;
-        let y_ratio = verlet.get_position().y / self.constraint_radius;
-
-        for pixel in img.pixels() {
-            print!("{:?}", pixel);
-        }
-        Ok(())
-    }
-
     pub fn color_from_image(&mut self, file_path: &str) -> Result<(), Box<dyn std::error::Error>> {
         let img = image::open(file_path)?;
         
@@ -255,9 +240,6 @@ impl Solver {
         let (img_width, img_height) = rgb_img.dimensions();
         
         println!("Image loaded: {}x{}", img_width, img_height);
-        
-        // Since we're working with a circular constraint, map positions relative to the constraint
-        let constraint_center = vec2(0.0, 0.0);
         
         for verlet in &mut self.verlets {
             let pos = verlet.get_position();

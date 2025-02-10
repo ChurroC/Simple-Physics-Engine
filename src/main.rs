@@ -26,15 +26,15 @@ async fn main() {
         constraint_radius,
     );
 
-    let dt = 1.0 / 60.0 / 2.0;  // Fixed 60 FPS physics update - With 8 subdivisions
-    let ball_drop_dt = 0.05;
+    let dt = 1.0 / 60.0 / 3.0;  // Fixed 60 FPS physics update - With 8 subdivisions
+    let ball_drop_dt = 0.1;
     let mouse_drop_dt = 0.1;
     let (mut accumulator, mut ball_drop_accumulator,mut mouse_drop_accumulator)  = (0.0, 0.0, 0.0);
 
     let mut last_time: f64 = get_time();
 
     // This is too force the simulation forward
-    for _ in 0..((15.0 / dt) as i32) {
+    for _ in 0..((50.0 / dt) as i32) {
         solver.update(dt);
         
         ball_drop_accumulator += dt;
@@ -93,19 +93,16 @@ async fn main() {
                     Vec2::new(0.0, 200.0), dt));
 
             ball_drop_accumulator = 0.0;
-            if solver.is_container_full() {
-                println!("{}", solver.is_container_full());
-                // solver.apply_rainbow_gradient();
-            }
         }
 
         while accumulator >= dt {
             solver.update(dt);
             accumulator -= dt;
             
-            if solver.is_container_full() {
-                solver.apply_rainbow_gradient();
-            }
+            // if solver.is_container_full() {
+                // println!("{}", solver.is_container_full());
+            //     solver.apply_rainbow_gradient();
+            // }
         }
         
         clear_background(BLACK);

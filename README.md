@@ -15,6 +15,8 @@ why use last dt for vel and accel
 TODO:
 Chains
 
+Make the color output be based of a gaussian output using the radius of the ball
+
 Fluid dynamics
 Rigid body dynamics
 Planet simulations
