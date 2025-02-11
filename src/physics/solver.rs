@@ -2,29 +2,41 @@ use super::verlet::Verlet;
 use glam::{vec2, Vec2, Vec4};
 use serde::{Serialize, Deserialize};
 use bincode;
-use image::GenericImageView;
 
 #[derive(Serialize, Deserialize)]
 pub struct Solver {
     verlets: Vec<Verlet>,
     gravity: Vec2,
     constraint_radius: f32,
+    events: Vec<(f32, bool, usize)>,  // Store persistent events list
 }
 
 
 impl Solver {
     pub fn new(verlets: &[Verlet], gravity: Vec2, constraint_radius: f32) -> Self {
+        let mut events = Vec::with_capacity(verlets.len() * 2);
+        
+        for (i, verlet) in verlets.iter().enumerate() {
+            let pos = verlet.get_position().x;
+            let radius = verlet.get_radius();
+            events.push((pos - radius, false, i));
+            events.push((pos + radius, true, i));
+        }
+
+        events.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+
         Solver {
             verlets: verlets.iter().cloned().collect(),
             gravity,
             constraint_radius,
+            events,
         }
     }
 
     pub fn update(&mut self, dt: f32) {
         self.apply_gravity();
-        self.apply_constraints(dt);
-        let collisions = self.find_collisions_loop();
+        self.apply_wall_constraints(dt);
+        let collisions = self.find_collisions_sort_sweep();
         self.solve_collisions(collisions, dt);
         self.update_positions(dt);
     }
@@ -44,7 +56,7 @@ impl Solver {
     // Pezzas way but even more accurate
     // Since his way of moving position creates a velocity spike
     // When just loses the normal velocity and keep the tangential velocity
-    fn apply_constraints_smooth(&mut self, dt: f32) {
+    fn apply_wall_constraints_smooth(&mut self, dt: f32) {
         let coefficient_of_restitution = 1.0;
         let constraint_center= vec2(0.0, 0.0);
 
@@ -66,7 +78,7 @@ impl Solver {
     }
 
     // More accurate bounce
-    fn apply_constraints(&mut self, dt: f32) {
+    fn apply_wall_constraints(&mut self, dt: f32) {
         let coefficient_of_restitution = 1.0;
         let constraint_center= vec2(0.0, 0.0);
 
@@ -87,6 +99,8 @@ impl Solver {
         }
     }
     
+    // O(n^2)
+    // 384 balls
     fn find_collisions_loop(&mut self) -> Vec<(usize, usize)> {
         let mut collisions: Vec<(usize, usize)> = Vec::new();
 
@@ -105,7 +119,73 @@ impl Solver {
             }
         }
 
-        return collisions;
+        collisions
+    }
+
+    // O(n log(n))
+    // 991 balls
+    fn find_collisions_sort_sweep(&mut self) -> Vec<(usize, usize)> {
+        let mut collisions: Vec<(usize, usize)> = Vec::new();
+        let len = self.verlets.len();
+    
+        // Step 1: Update event positions without recreating the list
+        for event in &mut self.events {
+            let id = event.2;
+            let verlet = &self.verlets[id];
+            let pos = verlet.get_position().x;
+            let radius = verlet.get_radius();
+    
+            if event.1 {
+                event.0 = pos + radius; // Right boundary
+            } else {
+                event.0 = pos - radius; // Left boundary
+            }
+        }
+
+        let start_index = self.events.len() / 2; // Start from the middle
+
+        for i in start_index..self.verlets.len() {
+            let id = i; // Compute the new index in `verlets`
+            let pos = self.verlets[i].get_position().x;
+            let radius = self.verlets[i].get_radius();
+
+            self.events.push((pos - radius, false, id));
+            self.events.push((pos + radius, true, id));
+        }
+    
+        // Step 2: Use insertion sort since events are nearly sorted
+        for i in 1..self.events.len() {
+            let mut j = i;
+            while j > 0 && self.events[j].0 < self.events[j - 1].0 {
+                self.events.swap(j, j - 1);
+                j -= 1;
+            }
+        }
+    
+        // Step 3: Sweep Line Collision Detection
+        let mut active: Vec<usize> = Vec::with_capacity(len);
+        let mut active_positions = vec![-1_i32; len];
+    
+        for &(_, is_end, id) in &self.events {
+            if !is_end {
+                for &active_id in &active {
+                    collisions.push((active_id.min(id), active_id.max(id)));
+                }
+                active_positions[id] = active.len() as i32;
+                active.push(id);
+            } else {
+                let pos = active_positions[id];
+                if pos >= 0 {
+                    active.swap_remove(pos as usize);
+                    if (pos as usize) < active.len() {
+                        active_positions[active[pos as usize]] = pos;
+                    }
+                    active_positions[id] = -1;
+                }
+            }
+        }
+    
+        collisions
     }
 
     fn solve_collisions(&mut self, collisions: Vec<(usize, usize)>, dt: f32) {

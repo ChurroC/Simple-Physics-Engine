@@ -26,25 +26,30 @@ async fn main() {
         constraint_radius,
     );
 
-    let dt = 1.0 / 60.0 / 3.0;  // Fixed 60 FPS physics update - With 8 subdivisions
+    let dt = 1.0 / 60.0 / 8.0;  // Fixed 60 FPS physics update - With 8 subdivisions - used for all testing
     let ball_drop_dt = 0.1;
     let mouse_drop_dt = 0.1;
     let (mut accumulator, mut ball_drop_accumulator,mut mouse_drop_accumulator)  = (0.0, 0.0, 0.0);
 
     let mut last_time: f64 = get_time();
 
-    // This is too force the simulation forward
-    for _ in 0..((50.0 / dt) as i32) {
-        solver.update(dt);
-        
-        ball_drop_accumulator += dt;
-        if ball_drop_accumulator >= ball_drop_dt && !solver.is_container_full() {
-            solver.add_position(Verlet::new_with_velocity(Vec2::new(1.0/2.2 * screen_width, screen_height / 8.0),
-                    Vec2::new(0.0, 200.0), dt));
+    let mut balls_til_60_fps = 0;
+    let fps_threshold: i32 = 60;
+    let measurement_frames: i32 = 30; // Number of frames to confirm slowdown
+    let mut slow_frames: i32 = 0;
 
-            ball_drop_accumulator = 0.0;
-        }
-    }
+    // This is too force the simulation forward
+    // for _ in 0..((15.0 / dt) as i32) {
+    //     solver.update(dt);
+        
+    //     ball_drop_accumulator += dt;
+    //     if ball_drop_accumulator >= ball_drop_dt && !solver.is_container_full() {
+    //         solver.add_position(Verlet::new_with_velocity(Vec2::new(1.0/2.2 * screen_width, screen_height / 8.0),
+    //                 Vec2::new(0.0, 200.0), dt));
+
+    //         ball_drop_accumulator = 0.0;
+    //     }
+    // }
     
     loop {
         let current_time = get_time();
@@ -160,6 +165,26 @@ async fn main() {
             ),
             20.0,
             100.0,
+            30.0,
+            WHITE
+        );
+        
+        // In your main loop:
+        if get_fps() < fps_threshold && balls_til_60_fps == 0 {  // Only track if we haven't found threshold
+            slow_frames += 1;
+            if slow_frames >= measurement_frames {
+                balls_til_60_fps = solver.get_verlets().len();
+            }
+        } else if balls_til_60_fps == 0 {  // Only reset if we haven't found threshold
+            slow_frames = 0;  // Reset if FPS recovers
+        }
+        draw_text(
+            &format!(
+                "60 fps ball count: {}", 
+                balls_til_60_fps,
+            ),
+            20.0,
+            135.0,
             30.0,
             WHITE
         );
