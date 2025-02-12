@@ -29,7 +29,7 @@ async fn main() {
         println!("Error loading colors: {}", e);
     }
 
-    let dt = 1.0 / 60.0 / 3.5;  // Fixed 60 FPS physics update - With 8 subdivisions - used for all testing
+    let dt = 1.0 / 60.0 / 7.6;  // Fixed 60 FPS physics update - With 8 subdivisions - used for all testing
     let ball_drop_dt = 0.1;
     let mouse_drop_dt = 0.1;
     let (mut accumulator, mut ball_drop_accumulator,mut mouse_drop_accumulator)  = (0.0, 0.0, 0.0);

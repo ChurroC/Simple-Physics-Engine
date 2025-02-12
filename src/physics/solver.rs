@@ -41,6 +41,7 @@ impl Solver {
     pub fn load_colors(&mut self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
         let data = std::fs::read(filename)?;
         self.color_frames = bincode::deserialize(&data)?;
+        println!("{:?}", self.color_frames);
         self.current_frame = 0;
         for verlet in &mut self.verlets {
             if self.current_frame < self.color_frames.len() {
@@ -308,7 +309,6 @@ impl Solver {
     pub fn add_position(&mut self, mut verlet: Verlet) {
         if !self.color_frames.is_empty() && self.current_frame < self.color_frames.len() {
             verlet.set_color(self.color_frames[self.current_frame]);
-            println!("Setting color: {}, {}", self.current_frame, self.verlets.len() + 1);
             self.current_frame += 1;
         }
         self.verlets.push(verlet);
@@ -439,6 +439,7 @@ impl Solver {
         for verlet in &self.verlets {
             colors.push(verlet.get_color());
         }
+        println!("{:?}", colors);
         
         let encoded = bincode::serialize(&colors)?;
         std::fs::write(filename, encoded)?;
