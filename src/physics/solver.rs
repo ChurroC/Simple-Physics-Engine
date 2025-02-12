@@ -1,5 +1,6 @@
 use super::verlet::Verlet;
 use glam::{vec2, Vec2, Vec4};
+use macroquad::color;
 use serde::{Serialize, Deserialize};
 use bincode;
 
@@ -9,12 +10,14 @@ pub struct Solver {
     gravity: Vec2,
     constraint_radius: f32,
     events: Vec<(f32, bool, usize)>,  // Store persistent events list
+    color_frames: Vec<Vec4>,
+    current_frame: usize,
 }
 
 
 impl Solver {
     pub fn new(verlets: &[Verlet], gravity: Vec2, constraint_radius: f32) -> Self {
-        let mut events = Vec::with_capacity(verlets.len() * 2);
+        let mut events = Vec::new();
         
         for (i, verlet) in verlets.iter().enumerate() {
             let pos = verlet.get_position().x;
@@ -30,7 +33,22 @@ impl Solver {
             gravity,
             constraint_radius,
             events,
+            color_frames: Vec::new(),
+            current_frame: 0,
         }
+    }
+    
+    pub fn load_colors(&mut self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let data = std::fs::read(filename)?;
+        self.color_frames = bincode::deserialize(&data)?;
+        self.current_frame = 0;
+        for verlet in &mut self.verlets {
+            if self.current_frame < self.color_frames.len() {
+                verlet.set_color(self.color_frames[self.current_frame]);
+                self.current_frame += 1;
+            }
+        }
+        Ok(())
     }
 
     pub fn update(&mut self, dt: f32) {
@@ -142,9 +160,8 @@ impl Solver {
             }
         }
 
-        let start_index = self.events.len() / 2; // Start from the middle
-
-        for i in start_index..self.verlets.len() {
+        let start_index = self.events.len() / 2;
+        for i in start_index..len {
             let id = i; // Compute the new index in `verlets`
             let pos = self.verlets[i].get_position().x;
             let radius = self.verlets[i].get_radius();
@@ -155,16 +172,15 @@ impl Solver {
     
         // Step 2: Use insertion sort since events are nearly sorted
         for i in 1..self.events.len() {
-            let mut j = i;
-            while j > 0 && self.events[j].0 < self.events[j - 1].0 {
-                self.events.swap(j, j - 1);
-                j -= 1;
+            for j in (1..i).rev() {
+                if self.events[j].0 < self.events[j + 1].0 {break;}
+                self.events.swap(j, j + 1);
             }
         }
     
         // Step 3: Sweep Line Collision Detection
-        let mut active: Vec<usize> = Vec::with_capacity(len);
-        let mut active_positions = vec![-1_i32; len];
+        let mut active: Vec<usize> = Vec::new();
+        let mut active_positions: Vec<i32> = vec![-1_i32; len];
     
         for &(_, is_end, id) in &self.events {
             if !is_end {
@@ -238,7 +254,7 @@ impl Solver {
         // Consider it full if particles take up more than X% of space
         // Note: Perfect circle packing is ~90.7% efficient
         let density = total_particle_area / container_area;
-        density > 0.87 // or whatever threshold makes sense
+        density > 0.9 // or whatever threshold makes sense
     }
     
     pub fn apply_rainbow_gradient(&mut self) {
@@ -289,10 +305,21 @@ impl Solver {
             .collect()
     }
 
-    pub fn add_position(&mut self, verlet: Verlet) {
+    pub fn add_position(&mut self, mut verlet: Verlet) {
+        if !self.color_frames.is_empty() && self.current_frame < self.color_frames.len() {
+            verlet.set_color(self.color_frames[self.current_frame]);
+            println!("Setting color: {}, {}", self.current_frame, self.verlets.len() + 1);
+            self.current_frame += 1;
+        }
         self.verlets.push(verlet);
     }
-    pub fn add_positions(&mut self, verlets: &[Verlet]) {
+    pub fn add_positions(&mut self, verlets: &mut [Verlet]) {
+        for verlet in verlets.iter_mut() {
+            if !self.color_frames.is_empty() && self.current_frame < self.color_frames.len() {
+                verlet.set_color(self.color_frames[self.current_frame]);
+                self.current_frame += 1;
+            }
+        }
         self.verlets.extend(verlets.iter().cloned());
     }
 
@@ -314,45 +341,107 @@ impl Solver {
 
     pub fn color_from_image(&mut self, file_path: &str) -> Result<(), Box<dyn std::error::Error>> {
         let img = image::open(file_path)?;
-        
-        // Convert image to RGB format
         let rgb_img = img.to_rgb8();
         let (img_width, img_height) = rgb_img.dimensions();
         
-        println!("Image loaded: {}x{}", img_width, img_height);
+        // Create Gaussian kernel
+        let kernel_size = 7; // Must be odd
+        let sigma = 10.0;
+        let kernel = self.create_gaussian_kernel(kernel_size, sigma);
         
         for verlet in &mut self.verlets {
-            let pos = verlet.get_position();
+            let pos: Vec2 = verlet.get_position();
             
-            // Map position relative to constraint
-            // Convert from -radius to +radius range to 0 to 1 range
+            // Map position to image coordinates
             let x_ratio = ((pos.x / self.constraint_radius) + 1.0) * 0.5;
             let y_ratio = ((pos.y / self.constraint_radius) + 1.0) * 0.5;
             
-            // Convert to pixel coordinates
-            let img_x = (x_ratio * (img_width - 1) as f32) as u32;
-            let img_y = ((1.0 - y_ratio) * (img_height - 1) as f32) as u32; // Flip Y to match image coordinates
+            let img_x = (x_ratio * (img_width - 1) as f32) as i32;
+            let img_y = (y_ratio * (img_height - 1) as f32) as i32;
             
-            // Get pixel color at mapped position
-            let pixel = rgb_img.get_pixel(img_x, img_y);
+            // Apply Gaussian blur at this position
+            let mut r_sum = 0.0;
+            let mut g_sum = 0.0;
+            let mut b_sum = 0.0;
+            let mut weight_sum = 0.0;
             
-            // Debug print some values
-            println!(
-                "Position: ({}, {}), Ratios: ({}, {}), Pixel: ({}, {}) Color: {:?}", 
-                pos.x, pos.y, x_ratio, y_ratio, img_x, img_y, pixel
-            );
+            let half_kernel = (kernel_size / 2) as i32;
             
-            // Create Vec4 with correct scaling (RGB values are 0-255, we need 0-1)
+            for y_offset in -half_kernel..half_kernel {
+                for x_offset in -half_kernel..half_kernel {
+                    let sample_x = img_x + x_offset;
+                    let sample_y = img_y + y_offset;
+                    
+                    // Skip samples outside image bounds
+                    if sample_x < 0 || sample_x >= img_width as i32 || 
+                       sample_y < 0 || sample_y >= img_height as i32 {
+                        continue;
+                    }
+                    
+                    let kernel_x = (x_offset + half_kernel) as usize; // so for -3 to 3, it will be 0 to 6 indices
+                    let kernel_y = (y_offset + half_kernel) as usize;
+                    let weight = kernel[kernel_y][kernel_x];
+                    
+                    let pixel = rgb_img.get_pixel(sample_x as u32, sample_y as u32);
+                    
+                    r_sum += pixel[0] as f32 * weight;
+                    g_sum += pixel[1] as f32 * weight;
+                    b_sum += pixel[2] as f32 * weight;
+                    weight_sum += weight;
+                }
+            }
+            
+            // Normalize by total weight
+            let r = (r_sum / weight_sum).clamp(0.0, 255.0);
+            let g = (g_sum / weight_sum).clamp(0.0, 255.0);
+            let b = (b_sum / weight_sum).clamp(0.0, 255.0);
+            
+            // Set the blurred color
             let color = Vec4::new(
-                pixel[0] as f32 / 255.0,
-                pixel[1] as f32 / 255.0,
-                pixel[2] as f32 / 255.0,
-                1.0
+                r,
+                g,
+                b,
+                255.0 // Full alpha
             );
             
-            verlet.set_color(color * 255.0); // Multiply by 255 since the game might expect 0-255 range
+            verlet.set_color(color);
         }
         
+        Ok(())
+    }
+    
+    fn create_gaussian_kernel(&self, size: usize, sigma: f32) -> Vec<Vec<f32>> {
+        let mut kernel = vec![vec![0.0; size]; size];
+        let center = (size as f32 - 1.0) / 2.0;
+        
+        for y in 0..size {
+            for x in 0..size {
+                let dx = x as f32 - center;
+                let dy = y as f32 - center;
+                let exponent = -(dx * dx + dy * dy) / (2.0 * sigma * sigma);
+                kernel[y][x] = (2.0 * std::f32::consts::PI * sigma * sigma).recip() * exponent.exp();
+            }
+        }
+        
+        // Normalize kernel
+        let sum: f32 = kernel.iter().flatten().sum();
+        for row in kernel.iter_mut() {
+            for value in row.iter_mut() {
+                *value /= sum;
+            }
+        }
+        
+        kernel
+    }
+
+    pub fn save_colors(&self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let mut colors: Vec<Vec4> = Vec::new();
+        for verlet in &self.verlets {
+            colors.push(verlet.get_color());
+        }
+        
+        let encoded = bincode::serialize(&colors)?;
+        std::fs::write(filename, encoded)?;
         Ok(())
     }
 }

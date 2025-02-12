@@ -25,6 +25,9 @@ Make the color output be based of a gaussian output using the radius of the ball
 
 implent CCD for high speeds
 
+Sweep-and-prune (final)
+idea from https://leanrada.com/notes/sweep-and-prune-2/
+
 
 // 1. Broad phase - quick check using spatial grid
 // 2. Medium phase - swept AABB check

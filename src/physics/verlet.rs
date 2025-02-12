@@ -18,13 +18,12 @@ pub struct Verlet {
 impl Verlet {
     pub fn new(position: Vec2) -> Self {
         let mut rng = rand::thread_rng();
-
         Verlet {
             position,
             last_position: position,
             acceleration: Vec2::ZERO,
             last_acceleration: Vec2::ZERO,
-            radius: 3.0,
+            radius: 6.2,
             density: 1.0,
             last_dt: 0.0,
             color: Vec4::new(rng.gen_range(0.0..256.0), rng.gen_range(0.0..256.0), rng.gen_range(0.0..256.0), 1.0),
@@ -51,7 +50,7 @@ impl Verlet {
             last_position: position - velocity * dt,  // Set this directly
             acceleration: Vec2::ZERO,
             last_acceleration: Vec2::ZERO,
-            radius: 3.0,
+            radius: 6.2,
             density: 1.0,
             last_dt: dt, // Set this directly
             color: Vec4::new(rng.gen_range(0.0..256.0), rng.gen_range(0.0..256.0), rng.gen_range(0.0..256.0), 1.0),

@@ -25,8 +25,11 @@ async fn main() {
         Vec2::new(0.0, 200.0),
         constraint_radius,
     );
+    if let Err(e) = solver.load_colors("colors.bin") {
+        println!("Error loading colors: {}", e);
+    }
 
-    let dt = 1.0 / 60.0 / 8.0;  // Fixed 60 FPS physics update - With 8 subdivisions - used for all testing
+    let dt = 1.0 / 60.0 / 3.5;  // Fixed 60 FPS physics update - With 8 subdivisions - used for all testing
     let ball_drop_dt = 0.1;
     let mouse_drop_dt = 0.1;
     let (mut accumulator, mut ball_drop_accumulator,mut mouse_drop_accumulator)  = (0.0, 0.0, 0.0);
@@ -39,7 +42,7 @@ async fn main() {
     let mut slow_frames: i32 = 0;
 
     // This is too force the simulation forward
-    // for _ in 0..((15.0 / dt) as i32) {
+    // for _ in 0..((60.0 / dt) as i32) {
     //     solver.update(dt);
         
     //     ball_drop_accumulator += dt;
@@ -62,16 +65,16 @@ async fn main() {
         
         if is_mouse_button_down(MouseButton::Left) {
             if mouse_drop_accumulator >= mouse_drop_dt {
-                println!("Mouse position: {:?}", mouse_position());
-                println!("Mouse position2: {:?}", vec2(screen_width / 2.0, screen_height / 2.0));
-                let position = vec2(mouse_position().0, mouse_position().1) -  vec2(screen_width / 2.0, screen_height / 2.0);
-                println!("Mouse position3: {:?}", position);
+                let position = vec2(mouse_position().0, mouse_position().1) - vec2(screen_width / 2.0, screen_height / 2.0);
                 solver.add_position(Verlet::new(position));  // Add new position at mouse position
                 mouse_drop_accumulator = 0.0;
             };
-            solver.color_from_image("churros.jpg");
         }
-
+        if is_mouse_button_down(MouseButton::Right) {
+            if let Err(e) = solver.color_from_image("churros.png") {
+                println!("Error loading image: {}", e);
+            }
+        }
         if is_key_pressed(KeyCode::S) {
             if let Err(e) = solver.save_state("simulation_state.bin") {
                 println!("Failed to save state: {}", e);
@@ -79,7 +82,6 @@ async fn main() {
                 println!("State saved successfully!");
             }
         }
-        
         if is_key_pressed(KeyCode::L) {
             match Solver::load_state("simulation_state.bin") {
                 Ok(loaded_solver) => {
@@ -87,6 +89,16 @@ async fn main() {
                     println!("State loaded successfully!");
                 }
                 Err(e) => println!("Failed to load state: {}", e),
+            }
+        }
+        if is_key_pressed(KeyCode::C) {
+            if let Err(e) = solver.save_colors("colors.bin") {
+                println!("Error saving colors: {}", e);
+            }
+        }
+        if is_key_pressed(KeyCode::V) {
+            if let Err(e) = solver.load_colors("colors.bin") {
+                println!("Error loading colors: {}", e);
             }
         }
         
