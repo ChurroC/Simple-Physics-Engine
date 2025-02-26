@@ -1,3 +1,9 @@
+BALLLZZZ
+SIMPLE
+LINK / CHAINS
+SOFT BODY DYNAMICS - BODDIIES
+
+
 TBH do I use self.last_dt or the current dt the change velocity
 Fix up add_velocoty
 
