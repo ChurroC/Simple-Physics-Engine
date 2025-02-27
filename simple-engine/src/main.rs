@@ -1,10 +1,15 @@
 #![allow(dead_code)]
-use macroquad::prelude::{clear_background, draw_circle, draw_circle_lines, get_time, is_key_pressed, is_mouse_button_down, mouse_position, next_frame, screen_height, screen_width, draw_text, draw_line, get_fps, BLACK, Color, MouseButton, KeyCode, WHITE};
-use glam::{vec2, Vec2};
+use macroquad::prelude::{clear_background, draw_circle, draw_circle_lines, draw_line, draw_text, get_fps, get_time, is_mouse_button_down, mouse_position, next_frame, screen_height, screen_width, MouseButton, BLACK, WHITE, ORANGE, RED, Color};
+use glam::Vec2;
+
+use std::fs::File;
+use std::io::Write;
+use std::io::Read;
+use serde_json::{json, Value};
 
 mod physics {
     pub mod solver;
-    pub mod verlet;  // Make sure to add this!
+    pub mod verlet;
 }
 use physics::{solver::Solver, verlet::Verlet};
 
@@ -20,19 +25,14 @@ async fn main() {
 
     let mut solver = Solver::new(
         &[
-            Verlet::new_with_radius(Vec2::new(screen_width/2.0, screen_height/2.0),
-            50.0),
-            Verlet::new_with_radius(Vec2::new(screen_width/2.0, screen_height/2.0),
-            5.0)
+            Verlet::new_with_radius(Vec2::new(0.0, 0.0),
+            20.0),
         ],
-        Vec2::new(0.0, 500.0),
+        Vec2::new(0.0, -500.0),
         constraint_radius,
     );
-    if let Err(e) = solver.load_colors("colors.bin") {
-        println!("Error loading colors: {}", e);
-    }
 
-    let dt = 1.0 / 60.0 / 20.0;  // Fixed 60 FPS physics update - With 8 subdivisions - used for all testing
+    let dt: f32 = 1.0 / 60.0 / 10.0;  // Fixed 60 FPS physics update - With 8 subdivisions - used for all testing
     let ball_drop_dt = 0.1;
     let mouse_drop_dt = 0.1;
     let (mut accumulator, mut ball_drop_accumulator,mut mouse_drop_accumulator)  = (0.0, 0.0, 0.0);
@@ -44,18 +44,8 @@ async fn main() {
     let measurement_frames: i32 = 30; // Number of frames to confirm slowdown
     let mut slow_frames: i32 = 0;
 
-    // This is too force the simulation forward
-    // for _ in 0..((60.0 / dt) as i32) {
-    //     solver.update(dt);
-        
-    //     ball_drop_accumulator += dt;
-    //     if ball_drop_accumulator >= ball_drop_dt && !solver.is_container_full() {
-    //         solver.add_position(Verlet::new_with_velocity(Vec2::new(1.0/2.2 * screen_width, screen_height / 8.0),
-    //                 Vec2::new(0.0, 200.0), dt));
-
-    //         ball_drop_accumulator = 0.0;
-    //     }
-    // }
+    let mut accumlator_determinism = 0.0;
+    let mut determinism_done = false;
     
     loop {
         let current_time = get_time();
@@ -65,68 +55,70 @@ async fn main() {
         accumulator += frame_time;
         ball_drop_accumulator += frame_time;
         mouse_drop_accumulator += frame_time;
+        accumlator_determinism += frame_time;
         
         if is_mouse_button_down(MouseButton::Left) {
             if mouse_drop_accumulator >= mouse_drop_dt {
-                let position = vec2(mouse_position().0, mouse_position().1) - vec2(screen_width / 2.0, screen_height / 2.0);
+                let position = Vec2::new(mouse_position().0, mouse_position().1) - Vec2::new(screen_width / 2.0, screen_height / 2.0);
                 solver.add_position(Verlet::new(position));  // Add new position at mouse position
                 mouse_drop_accumulator = 0.0;
             };
         }
-        if is_mouse_button_down(MouseButton::Right) {
-            if let Err(e) = solver.color_from_image("churros.png") {
-                println!("Error loading image: {}", e);
-            }
-        }
-        if is_key_pressed(KeyCode::S) {
-            if let Err(e) = solver.save_state("simulation_state.bin") {
-                println!("Failed to save state: {}", e);
-            } else {
-                println!("State saved successfully!");
-            }
-        }
-        if is_key_pressed(KeyCode::L) {
-            match Solver::load_state("simulation_state.bin") {
-                Ok(loaded_solver) => {
-                    solver = loaded_solver;
-                    println!("State loaded successfully!");
-                }
-                Err(e) => println!("Failed to load state: {}", e),
-            }
-        }
-        if is_key_pressed(KeyCode::C) {
-            if let Err(e) = solver.save_colors("colors.bin") {
-                println!("Error saving colors: {}", e);
-            } else {
-                println!("Colors saved successfully!");
-            }
-        }
-        if is_key_pressed(KeyCode::V) {
-            if let Err(e) = solver.load_colors("colors.bin") {
-                println!("Error loading colors: {}", e);
-            } else {
-                println!("Colors loaded successfully!");
-            }
-        }
         
         if ball_drop_accumulator >= ball_drop_dt && !solver.is_container_full() {
-            // let angle = rand::gen_range(0.0, std::f32::consts::TAU);
-            // solver.add_position(Verlet::new_with_velocity(Vec2::new(screen_width / 2.0, screen_height / 2.0),
-            //         500.0 * Vec2::new(angle.cos(), angle.sin()), dt));
             let mut ballz = Verlet::new_with_radius(Vec2::new(0.15 * screen_width,0.0), 20.0);
             ballz.set_velocity(Vec2::new(0.0, 200.0), dt);
-            solver.add_position(ballz);
+            // solver.add_position(ballz);
             ball_drop_accumulator = 0.0;
+        }
+
+        if accumlator_determinism >= 3.0 && !determinism_done {
+            // Try to open the file and read its contents
+            let mut contents = String::new();
+            let mut data: Value = match File::open("output.json") {
+                Ok(mut file) => {
+                    file.read_to_string(&mut contents).expect("Failed to read file");
+        
+                    // Check if the file is empty
+                    if contents.trim().is_empty() {
+                        // Initialize with an empty object containing a "ball" array
+                        json!({ "ball": [] })
+                    } else {
+                        // Parse the JSON data
+                        serde_json::from_str(&contents).expect("Failed to parse JSON")
+                    }
+                }
+                Err(_) => {
+                    // If the file doesn't exist, create it with an empty object containing a "ball" array
+                    json!({ "ball": [] })
+                }
+            };
+            println!("{:?}", data);
+        
+            // Append the ball's position to the JSON array
+            let (x, y) = solver.get_verlets()[0].get_position().into();
+            if let Value::Object(ref mut object) = data {
+                if let Some(Value::Array(ref mut ball_array)) = object.get_mut("ball") {
+                    ball_array.push(json!(format!("{}, {}", x, y)));
+                } else {
+                    // If "ball" is not an array, replace it with an array containing the new position
+                    object.insert("ball".to_string(), json!([format!("{}, {}", x, y)]));
+                }
+            }
+            println!("{:?}", data);
+        
+            // Write the updated JSON data back to the file
+            let mut file = File::create("output.json").expect("Failed to create file");
+            let json_string = serde_json::to_string_pretty(&data).expect("Failed to serialize JSON");
+            file.write_all(json_string.as_bytes()).expect("Failed to write to file");
+        
+            determinism_done = true;
+            println!("Determinism test complete");
         }
 
         while accumulator >= dt {
             solver.update(dt);
             accumulator -= dt;
-            
-            // if solver.is_container_full() {
-                // println!("{}", solver.is_container_full());
-            //     solver.apply_rainbow_gradient();
-            // }
         }
         
         clear_background(BLACK);
@@ -135,25 +127,22 @@ async fn main() {
         let alpha = accumulator / dt;
         for verlet in solver.get_verlets() {
             // This is since the solver imagines the ball at being shows at 0, 0
-            let origin = vec2(screen_width / 2.0, screen_height / 2.0);
-            let interpolated_pos = origin + verlet.get_interpolated_position(alpha);
+            let origin = Vec2::new(screen_width / 2.0, screen_height / 2.0);
+            let interpolated_pos = origin + verlet.get_interpolated_position(alpha) * Vec2::new(1.0, -1.0);
             let (x, y) = interpolated_pos.into();
             draw_circle(x, y, verlet.get_radius(), Color::from_rgba(
-                verlet.get_color().x as u8,
-                verlet.get_color().y as u8,
-                verlet.get_color().z as u8,
-                255
+                255, 255, 255, 255
             ));
-            // draw_arrow(
-            //     interpolated_pos,
-            //     interpolated_pos + verlet.get_velocity() / 5.0,
-            //     ORANGE
-            // );
-            // draw_arrow(
-            //     interpolated_pos,
-            //     interpolated_pos + verlet.get_acceleration() / 5.0,
-            //     RED
-            // );
+            draw_arrow(
+                interpolated_pos,
+                interpolated_pos + verlet.get_velocity() * Vec2::new(1.0, -1.0) / 5.0,
+                ORANGE
+            );
+            draw_arrow(
+                interpolated_pos,
+                interpolated_pos + verlet.get_acceleration() * Vec2::new(1.0, -1.0) / 5.0,
+                RED
+            );
         }
 
         // Enhanced debug display
@@ -187,6 +176,15 @@ async fn main() {
             30.0,
             WHITE
         );
+        draw_text(
+            &format!(
+                "time: {accumlator_determinism:.4}"
+            ),
+            20.0,
+            135.0,
+            30.0,
+            WHITE
+        );
         
         // In your main loop:
         if get_fps() < fps_threshold && balls_til_60_fps == 0 {  // Only track if we haven't found threshold
@@ -203,7 +201,7 @@ async fn main() {
                 balls_til_60_fps,
             ),
             20.0,
-            135.0,
+            170.0,
             30.0,
             WHITE
         );
