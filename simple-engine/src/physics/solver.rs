@@ -1,15 +1,15 @@
 use super::verlet::Verlet;
-use glam::Vec2;
+use glam::DVec2;
 
 pub struct Solver {
     verlets: Vec<Verlet>,
-    gravity: Vec2,
-    constraint_radius: f32,
+    gravity: DVec2,
+    constraint_radius: f64,
 }
 
 
 impl Solver {
-    pub fn new(verlets: &[Verlet], gravity: Vec2, constraint_radius: f32) -> Self {
+    pub fn new(verlets: &[Verlet], gravity: DVec2, constraint_radius: f64) -> Self {
         Solver {
             verlets: verlets.iter().cloned().collect(),
             gravity,
@@ -17,7 +17,7 @@ impl Solver {
         }
     }
 
-    pub fn update(&mut self, dt: f32) {
+    pub fn update(&mut self, dt: f64) {
         self.apply_gravity();
         self.apply_wall_constraints(dt);
         let collisions = self.find_collisions_loop();
@@ -25,7 +25,7 @@ impl Solver {
         self.update_positions(dt);
     }
 
-    fn update_positions(&mut self, dt: f32) {
+    fn update_positions(&mut self, dt: f64) {
         for verlet in &mut self.verlets {
             verlet.update_position(dt);
         }
@@ -38,9 +38,9 @@ impl Solver {
     }
 
     // More accurate bounce
-    fn apply_wall_constraints(&mut self, dt: f32) {
+    fn apply_wall_constraints(&mut self, dt: f64) {
         let coefficient_of_restitution = 1.0;
-        let constraint_center= Vec2::new(0.0, 0.0);
+        let constraint_center= DVec2::new(0.0, 0.0);
 
         for verlet in &mut self.verlets {
             let dist_to_cen = verlet.get_position() - constraint_center; // Or distance to verlet from center
@@ -56,6 +56,15 @@ impl Solver {
                 verlet.set_position(correct_position);
                 verlet.set_velocity( (vel - 2.0 * v_norm) * coefficient_of_restitution, dt); // Just push the portion normal to the wall inverse
             }
+        }
+    }
+
+    pub fn deterministic_normalize(&self, vec: DVec2) -> DVec2 {
+        let length = (vec.x * vec.x + vec.y * vec.y).sqrt();
+        if length > 1e-10 {  // Avoid division by very small numbers
+            DVec2::new(vec.x / length, vec.y / length)
+        } else {
+            DVec2::ZERO
         }
     }
     
@@ -82,7 +91,19 @@ impl Solver {
         collisions
     }
 
-    fn solve_collisions(&mut self, collisions: Vec<(usize, usize)>, dt: f32) {
+    fn solve_collisions(&mut self, mut collisions: Vec<(usize, usize)>, dt: f64) {
+        collisions.sort_by(|a, b| {
+            if a.0 == b.0 {
+                a.1.cmp(&b.1)
+            } else {
+                a.0.cmp(&b.0)
+            }
+        });
+        
+        // Force dt to have consistent precision
+        let dt_str = format!("{:.15}", dt);
+        let dt: f64 = dt_str.parse().unwrap();
+        
         let coefficient_of_restitution = 0.93;
 
         for (i, j) in collisions {
@@ -121,13 +142,13 @@ impl Solver {
 
     pub fn is_container_full(&self) -> bool {
         // Calculate total area of particles
-        let total_particle_area: f32 = self.verlets
+        let total_particle_area: f64 = self.verlets
             .iter()
-            .map(|v| std::f32::consts::PI * v.get_radius() * v.get_radius())
+            .map(|v| std::f64::consts::PI * v.get_radius() * v.get_radius())
             .sum();
         
         // Calculate container area
-        let container_area = std::f32::consts::PI * self.constraint_radius * self.constraint_radius;
+        let container_area = std::f64::consts::PI * self.constraint_radius * self.constraint_radius;
         
         // Consider it full if particles take up more than X% of space
         // Note: Perfect circle packing is ~90.7% efficient
@@ -135,7 +156,7 @@ impl Solver {
         density > 0.9 // or whatever threshold makes sense
     }
 
-    pub fn get_positions(&self) -> Vec<Vec2> {
+    pub fn get_positions(&self) -> Vec<DVec2> {
         self.verlets.iter()
             .map(|verlet| verlet.get_position())
             .collect()

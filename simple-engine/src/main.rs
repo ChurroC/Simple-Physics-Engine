@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 use macroquad::prelude::{clear_background, draw_circle, draw_circle_lines, draw_line, draw_text, get_fps, get_time, is_mouse_button_down, mouse_position, next_frame, screen_height, screen_width, MouseButton, BLACK, WHITE, ORANGE, RED, Color};
-use glam::Vec2;
+use glam::DVec2;
 
 use std::fs::File;
 use std::io::Write;
@@ -21,23 +21,25 @@ async fn main() {
     let screen_height = screen_height();
 
     // Calculate constraint radius
-    let constraint_radius = screen_height.min(screen_width) / 2.0 - 50.0;
+    let constraint_radius = screen_height.min(screen_width) as f64 / 2.0 - 50.0;
 
     let mut solver = Solver::new(
         &[
-            Verlet::new_with_radius(Vec2::new(0.0, 0.0),
+            Verlet::new_with_radius(DVec2::new(0.0, 180.0),
             20.0),
         ],
-        Vec2::new(0.0, -500.0),
+        DVec2::new(0.0, -500.0),
         constraint_radius,
     );
 
-    let dt: f32 = 1.0 / 60.0 / 10.0;  // Fixed 60 FPS physics update - With 8 subdivisions - used for all testing
+    let dt: f64 = 1.0 / 60.0 / 10.0;  // Fixed 60 FPS physics update - With 8 subdivisions - used for all testing
     let ball_drop_dt = 0.1;
     let mouse_drop_dt = 0.1;
-    let (mut accumulator, mut ball_drop_accumulator,mut mouse_drop_accumulator)  = (0.0, 0.0, 0.0);
+    let (mut accumulator, mut ball_drop_accumulator,mut mouse_drop_accumulator): (f64, f64, f64)  = (0.0, 0.0, 0.0);
 
     let mut last_time: f64 = get_time();
+
+    let mut total_time: f64 = 0.0;
 
     let mut balls_til_60_fps = 0;
     let fps_threshold: i32 = 60;
@@ -49,7 +51,7 @@ async fn main() {
     
     loop {
         let current_time = get_time();
-        let frame_time = (current_time - last_time) as f32;
+        let frame_time = (current_time - last_time);
         last_time = current_time;
         
         accumulator += frame_time;
@@ -59,20 +61,20 @@ async fn main() {
         
         if is_mouse_button_down(MouseButton::Left) {
             if mouse_drop_accumulator >= mouse_drop_dt {
-                let position = Vec2::new(mouse_position().0, mouse_position().1) - Vec2::new(screen_width / 2.0, screen_height / 2.0);
+                let position = DVec2::new(mouse_position().0.into(), mouse_position().1.into()) - DVec2::new(screen_width as f64 / 2.0, screen_height as f64 / 2.0);
                 solver.add_position(Verlet::new(position));  // Add new position at mouse position
                 mouse_drop_accumulator = 0.0;
             };
         }
         
         if ball_drop_accumulator >= ball_drop_dt && !solver.is_container_full() {
-            let mut ballz = Verlet::new_with_radius(Vec2::new(0.15 * screen_width,0.0), 20.0);
-            ballz.set_velocity(Vec2::new(0.0, 200.0), dt);
+            let mut ballz = Verlet::new_with_radius(DVec2::new(0.15 * (screen_width as f64),0.0), 20.0);
+            ballz.set_velocity(DVec2::new(0.0, 200.0), dt);
             // solver.add_position(ballz);
             ball_drop_accumulator = 0.0;
         }
 
-        if accumlator_determinism >= 3.0 && !determinism_done {
+        if accumlator_determinism >= 0.8 && !determinism_done {
             // Try to open the file and read its contents
             let mut contents = String::new();
             let mut data: Value = match File::open("output.json") {
@@ -99,7 +101,10 @@ async fn main() {
             let (x, y) = solver.get_verlets()[0].get_position().into();
             if let Value::Object(ref mut object) = data {
                 if let Some(Value::Array(ref mut ball_array)) = object.get_mut("ball") {
-                    ball_array.push(json!(format!("{}, {}", x, y)));
+                    let x_str = format!("{:.15}", solver.get_verlets()[0].get_position().x);
+                    let y_str = format!("{:.15}", solver.get_verlets()[0].get_position().y);
+                    let position_str = format!("{}, {}: {}", x_str, y_str, total_time);
+                    ball_array.push(json!(position_str));
                 } else {
                     // If "ball" is not an array, replace it with an array containing the new position
                     object.insert("ball".to_string(), json!([format!("{}, {}", x, y)]));
@@ -116,31 +121,33 @@ async fn main() {
             println!("Determinism test complete");
         }
 
-        while accumulator >= dt {
+        while accumulator as f64 >= dt {
             solver.update(dt);
             accumulator -= dt;
+            total_time += dt; // Track total elapsed time
         }
         
         clear_background(BLACK);
-        draw_circle_lines(screen_width / 2.0, screen_height / 2.0, constraint_radius, 1.0, WHITE);  // Draw constraint circle
+        draw_circle_lines(screen_width / 2.0, screen_height / 2.0, constraint_radius as f32, 1.0, WHITE);  // Draw constraint circle
         
-        let alpha = accumulator / dt;
+        let alpha = accumulator as f64 / dt;
         for verlet in solver.get_verlets() {
             // This is since the solver imagines the ball at being shows at 0, 0
-            let origin = Vec2::new(screen_width / 2.0, screen_height / 2.0);
-            let interpolated_pos = origin + verlet.get_interpolated_position(alpha) * Vec2::new(1.0, -1.0);
-            let (x, y) = interpolated_pos.into();
-            draw_circle(x, y, verlet.get_radius(), Color::from_rgba(
+            let origin = DVec2::new(screen_width as f64 / 2.0, screen_height as f64 / 2.0);
+            let interpolated_pos = origin + verlet.get_interpolated_position(alpha) * DVec2::new(1.0, -1.0);
+            let x = interpolated_pos.x as f32;
+            let y = interpolated_pos.y as f32;
+            draw_circle(x, y, verlet.get_radius() as f32, Color::from_rgba(
                 255, 255, 255, 255
             ));
             draw_arrow(
                 interpolated_pos,
-                interpolated_pos + verlet.get_velocity() * Vec2::new(1.0, -1.0) / 5.0,
+                interpolated_pos + verlet.get_velocity() * DVec2::new(1.0, -1.0) / 5.0,
                 ORANGE
             );
             draw_arrow(
                 interpolated_pos,
-                interpolated_pos + verlet.get_acceleration() * Vec2::new(1.0, -1.0) / 5.0,
+                interpolated_pos + verlet.get_acceleration() * DVec2::new(1.0, -1.0) / 5.0,
                 RED
             );
         }
@@ -209,28 +216,28 @@ async fn main() {
     }
 }
 
-fn draw_arrow(start: Vec2, end: Vec2, color: Color) {
+fn draw_arrow(start: DVec2, end: DVec2, color: Color) {
     // Draw the shaft of the arrow
-    draw_line(start.x, start.y, end.x, end.y, 2.0, color);
+    draw_line(start.x as f32, start.y as f32, end.x as f32, end.y as f32, 2.0, color);
 
     // Calculate the direction vector
     let direction = (end - start).normalize();
 
     // Calculate the points for the arrowhead
     let arrowhead_length = 10.0;
-    let arrowhead_angle = (30.0 as f32).to_radians();
+    let arrowhead_angle = (30.0 as f64).to_radians();
 
-    let left_arrowhead = Vec2::new(
+    let left_arrowhead = DVec2::new(
         end.x - arrowhead_length * (direction.x * arrowhead_angle.cos() - direction.y * arrowhead_angle.sin()),
         end.y - arrowhead_length * (direction.x * arrowhead_angle.sin() + direction.y * arrowhead_angle.cos()),
     );
 
-    let right_arrowhead = Vec2::new(
+    let right_arrowhead = DVec2::new(
         end.x - arrowhead_length * (direction.x * arrowhead_angle.cos() + direction.y * arrowhead_angle.sin()),
         end.y - arrowhead_length * (-direction.x * arrowhead_angle.sin() + direction.y * arrowhead_angle.cos()),
     );
 
     // Draw the arrowhead
-    draw_line(end.x, end.y, left_arrowhead.x, left_arrowhead.y, 2.0, color);
-    draw_line(end.x, end.y, right_arrowhead.x, right_arrowhead.y, 2.0, color);
+    draw_line(end.x as f32, end.y as f32, left_arrowhead.x as f32, left_arrowhead.y as f32, 2.0, color);
+    draw_line(end.x as f32, end.y as f32, right_arrowhead.x as f32, right_arrowhead.y as f32, 2.0, color);
 }
