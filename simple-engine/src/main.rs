@@ -1,7 +1,9 @@
 #![allow(dead_code)]
+
 use macroquad::prelude::{clear_background, draw_circle, draw_circle_lines, draw_line, draw_text, get_fps, get_time, is_mouse_button_down, mouse_position, next_frame, screen_height, screen_width, MouseButton, BLACK, WHITE, ORANGE, RED, Color};
 use glam::DVec2;
 
+use core::time;
 use std::fs::File;
 use std::io::Write;
 use std::io::Read;
@@ -46,7 +48,6 @@ async fn main() {
     let measurement_frames: i32 = 30; // Number of frames to confirm slowdown
     let mut slow_frames: i32 = 0;
 
-    let mut accumlator_determinism = 0.0;
     let mut determinism_done = false;
     
     loop {
@@ -57,7 +58,6 @@ async fn main() {
         accumulator += frame_time;
         ball_drop_accumulator += frame_time;
         mouse_drop_accumulator += frame_time;
-        accumlator_determinism += frame_time;
         
         if is_mouse_button_down(MouseButton::Left) {
             if mouse_drop_accumulator >= mouse_drop_dt {
@@ -74,7 +74,7 @@ async fn main() {
             ball_drop_accumulator = 0.0;
         }
 
-        if accumlator_determinism >= 0.8 && !determinism_done {
+        if total_time >= 0.8 && !determinism_done {
             // Try to open the file and read its contents
             let mut contents = String::new();
             let mut data: Value = match File::open("output.json") {
@@ -103,7 +103,9 @@ async fn main() {
                 if let Some(Value::Array(ref mut ball_array)) = object.get_mut("ball") {
                     let x_str = format!("{:.15}", solver.get_verlets()[0].get_position().x);
                     let y_str = format!("{:.15}", solver.get_verlets()[0].get_position().y);
-                    let position_str = format!("{}, {}: {}", x_str, y_str, total_time);
+                    let x_str_inter = format!("{:.15}", solver.get_verlets()[0].get_interpolated_position((0.9-total_time) / 0.9).x);
+                    let y_str_inter = format!("{:.15}", solver.get_verlets()[0].get_interpolated_position((0.9-total_time) / 0.9).y);
+                    let position_str = format!("{}, {}: {} --- {}, {}: {}", x_str, y_str, total_time, x_str_inter, y_str_inter, "0.9");
                     ball_array.push(json!(position_str));
                 } else {
                     // If "ball" is not an array, replace it with an array containing the new position
@@ -185,7 +187,7 @@ async fn main() {
         );
         draw_text(
             &format!(
-                "time: {accumlator_determinism:.4}"
+                "time: {total_time:.4}"
             ),
             20.0,
             135.0,

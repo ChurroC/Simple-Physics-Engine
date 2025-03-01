@@ -92,40 +92,15 @@ impl Verlet {
         self.last_position + (self.position - self.last_position) * alpha
     }
 
-    pub fn update_position(&mut self, dt: f64) {
-        // 1. Use string representation to guarantee consistent precision
-        let dt_str = format!("{:.15}", dt);
-        let dt: f64 = dt_str.parse().unwrap();
-        
-        // 2. Save displacement in a deterministic way
-        let dx_str = format!("{:.15}", self.position.x - self.last_position.x);
-        let dy_str = format!("{:.15}", self.position.y - self.last_position.y);
-        let dx: f64 = dx_str.parse().unwrap();
-        let dy: f64 = dy_str.parse().unwrap();
-        
-        // 3. Save current position
+    pub fn update_position(&mut self, dt: f64){
+        let displacement = self.position - self.last_position;
         self.last_position = self.position;
         
-        // 4. Calculate acceleration term with string-based precision
-        let dt2_str = format!("{:.15}", dt * dt);
-        let dt2: f64 = dt2_str.parse().unwrap();
-        
-        let acc_x_term_str = format!("{:.15}", self.acceleration.x * dt2);
-        let acc_y_term_str = format!("{:.15}", self.acceleration.y * dt2);
-        let acc_x_term: f64 = acc_x_term_str.parse().unwrap();
-        let acc_y_term: f64 = acc_y_term_str.parse().unwrap();
-        
-        // 5. Update position with forced precision
-        let new_x_str = format!("{:.15}", self.position.x + dx + acc_x_term);
-        let new_y_str = format!("{:.15}", self.position.y + dy + acc_y_term);
-        self.position.x = new_x_str.parse().unwrap();
-        self.position.y = new_y_str.parse().unwrap();
-        
-        // 6. Store acceleration for visualization
+        self.position += self.acceleration * dt * dt;
+        self.position += displacement;
+
         self.last_acceleration = self.acceleration;
         self.last_dt = dt;
-        
-        // 7. Reset acceleration for next frame
-        self.acceleration = DVec2::ZERO;
+        self.acceleration = DVec2::ZERO; // Reset acceleration applied at this frame
     }
 }

@@ -7,9 +7,12 @@ SOFT BODY DYNAMICS - BODDIIES
 TBH do I use self.last_dt or the current dt the change velocity
 Fix up add_velocoty
 
+try storing displacment instead of last
+
 https://www.gafferongames.com/post/fix_your_timestep/ - Peak
 https://leanrada.com/notes/sweep-and-prune/
 https://developer.nvidia.com/gpugems/gpugems3/part-v-physics-simulation/chapter-32-broad-phase-collision-detection-cuda
+https://lisyarus.github.io/blog/posts/perfect-collisions.html#section-you-spin
 
 
 colliisn keep causing eahc object to move then can't apply gravity

@@ -1,4 +1,4 @@
-use super::verlet::{self, Verlet};
+use super::verlet::Verlet;
 use glam::{vec2, Vec2, Vec4};
 use serde::{Serialize, Deserialize};
 use bincode;
