@@ -9,6 +9,9 @@ use std::io::Write;
 use std::io::Read;
 use serde_json::{json, Value};
 
+use std::time::{SystemTime, UNIX_EPOCH};
+
+
 mod physics {
     pub mod solver;
     pub mod verlet;
@@ -34,14 +37,19 @@ async fn main() {
         constraint_radius,
     );
 
-    let dt: f64 = 1.0 / 60.0 / 10.0;  // Fixed 60 FPS physics update - With 8 subdivisions - used for all testing
-    let ball_drop_dt = 0.1;
-    let mouse_drop_dt = 0.1;
-    let (mut accumulator, mut ball_drop_accumulator,mut mouse_drop_accumulator): (f64, f64, f64)  = (0.0, 0.0, 0.0);
+    let dt: u128 = 1;  // Fixed dt in milliseconds (approximately 0.55ms)
+    println!("dt: {}", dt);
+    let ball_drop_dt = 100;         // 0.1 seconds in milliseconds
+    let mouse_drop_dt = 100;  
+    let (mut accumulator, mut ball_drop_accumulator, mut mouse_drop_accumulator): (u128, u128, u128) = (0, 0, 0);
 
-    let mut last_time: f64 = get_time();
 
-    let mut total_time: f64 = 0.0;
+    let mut last_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_millis();
+
+    let mut total_time: u128 = 0;
 
     let mut balls_til_60_fps = 0;
     let fps_threshold: i32 = 60;
@@ -51,8 +59,12 @@ async fn main() {
     let mut determinism_done = false;
     
     loop {
-        let current_time = get_time();
-        let frame_time = (current_time - last_time);
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_millis();
+        let frame_time = current_time - last_time;
+        println!("Frame time: {}\r", frame_time);
         last_time = current_time;
         
         accumulator += frame_time;
@@ -63,18 +75,18 @@ async fn main() {
             if mouse_drop_accumulator >= mouse_drop_dt {
                 let position = DVec2::new(mouse_position().0.into(), mouse_position().1.into()) - DVec2::new(screen_width as f64 / 2.0, screen_height as f64 / 2.0);
                 solver.add_position(Verlet::new(position));  // Add new position at mouse position
-                mouse_drop_accumulator = 0.0;
+                mouse_drop_accumulator = 0;
             };
         }
         
         if ball_drop_accumulator >= ball_drop_dt && !solver.is_container_full() {
             let mut ballz = Verlet::new_with_radius(DVec2::new(0.15 * (screen_width as f64),0.0), 20.0);
-            ballz.set_velocity(DVec2::new(0.0, 200.0), dt);
+            ballz.set_velocity(DVec2::new(0.0, 200.0), dt as f64 / 1000.0);
             // solver.add_position(ballz);
-            ball_drop_accumulator = 0.0;
+            ball_drop_accumulator = 0;
         }
 
-        if total_time >= 0.8 && !determinism_done {
+        if total_time >= 800 && !determinism_done {
             // Try to open the file and read its contents
             let mut contents = String::new();
             let mut data: Value = match File::open("output.json") {
@@ -103,9 +115,9 @@ async fn main() {
                 if let Some(Value::Array(ref mut ball_array)) = object.get_mut("ball") {
                     let x_str = format!("{:.15}", solver.get_verlets()[0].get_position().x);
                     let y_str = format!("{:.15}", solver.get_verlets()[0].get_position().y);
-                    let x_str_inter = format!("{:.15}", solver.get_verlets()[0].get_interpolated_position((0.9-total_time) / 0.9).x);
-                    let y_str_inter = format!("{:.15}", solver.get_verlets()[0].get_interpolated_position((0.9-total_time) / 0.9).y);
-                    let position_str = format!("{}, {}: {} --- {}, {}: {}", x_str, y_str, total_time, x_str_inter, y_str_inter, "0.9");
+                    let x_str_inter = format!("{:.15}", solver.get_verlets()[0].get_interpolated_position((0.9-total_time as f64) / 0.815).x);
+                    let y_str_inter = format!("{:.15}", solver.get_verlets()[0].get_interpolated_position((0.9-total_time as f64) / 0.815).y);
+                    let position_str = format!("{}, {}: {} --- {}, {}: {}", x_str, y_str, total_time, x_str_inter, y_str_inter, "0.815");
                     ball_array.push(json!(position_str));
                 } else {
                     // If "ball" is not an array, replace it with an array containing the new position
@@ -123,20 +135,22 @@ async fn main() {
             println!("Determinism test complete");
         }
 
-        while accumulator as f64 >= dt {
-            solver.update(dt);
+        println!("wow");
+        while accumulator >= dt {
+            solver.update(dt as f64 / 1000.0);  // Convert to seconds only when passing to physics
             accumulator -= dt;
-            total_time += dt; // Track total elapsed time
+            total_time += dt;
         }
+        println!("wow");
         
         clear_background(BLACK);
         draw_circle_lines(screen_width / 2.0, screen_height / 2.0, constraint_radius as f32, 1.0, WHITE);  // Draw constraint circle
         
-        let alpha = accumulator as f64 / dt;
+        let alpha = accumulator / dt;
         for verlet in solver.get_verlets() {
             // This is since the solver imagines the ball at being shows at 0, 0
             let origin = DVec2::new(screen_width as f64 / 2.0, screen_height as f64 / 2.0);
-            let interpolated_pos = origin + verlet.get_interpolated_position(alpha) * DVec2::new(1.0, -1.0);
+            let interpolated_pos = origin + verlet.get_interpolated_position(alpha as f64) * DVec2::new(1.0, -1.0);
             let x = interpolated_pos.x as f32;
             let y = interpolated_pos.y as f32;
             draw_circle(x, y, verlet.get_radius() as f32, Color::from_rgba(
