@@ -1,106 +1,132 @@
-use glam::DVec2;
+use glam::{Vec2, Vec4};
 
 
 #[derive(Clone, Debug)]
 pub struct Verlet {
-    position: DVec2,
-    last_position: DVec2,
-    acceleration: DVec2,
-    last_acceleration: DVec2,
-    radius: f64,
-    density: f64,
-    last_dt: f64,
+    id: usize,
+    position: Vec2,
+    last_position: Vec2,
+    acceleration: Vec2,
+    last_acceleration: Vec2,
+    radius: f32,
+    density: f32,
+    last_dt: f32,
+    color: Vec4,
 }
 
 impl Verlet {
-    pub fn new(position: DVec2) -> Self {
+    pub fn new(position: Vec2) -> Self {
         Verlet {
+            id: 0,
             position,
             last_position: position,
-            acceleration: DVec2::ZERO,
-            last_acceleration: DVec2::ZERO,
+            acceleration: Vec2::ZERO,
+            last_acceleration: Vec2::ZERO,
             radius: 9.0,
             density: 1.0,
             last_dt: 0.0,
+            color: Vec4::new(1.0, 1.0, 1.0, 1.0),
         }
     }
-    pub fn new_with_radius(position: DVec2, radius: f64) -> Self {
+    pub fn new_with_radius(position: Vec2, radius: f32) -> Self {
         let radius = radius.into();
         Verlet {
+            id: 0,
             position,
             last_position: position,
-            acceleration: DVec2::ZERO,
-            last_acceleration: DVec2::ZERO,
+            acceleration: Vec2::ZERO,
+            last_acceleration: Vec2::ZERO,
             radius: radius,
             density: 1.0,
             last_dt: 0.0,
+            color: Vec4::new(1.0, 1.0, 1.0, 1.0),
         }
     }
-    pub fn new_with_velocity(position: DVec2, velocity: DVec2, dt: f64) -> Self {
+    pub fn new_with_velocity(position: Vec2, velocity: Vec2, dt: f32) -> Self {
         Verlet {
+            id: 0,
             position,
             last_position: position - velocity * dt,  // Set this directly
-            acceleration: DVec2::ZERO,
-            last_acceleration: DVec2::ZERO,
+            acceleration: Vec2::ZERO,
+            last_acceleration: Vec2::ZERO,
             radius: 9.0,
             density: 1.0,
             last_dt: dt, // Set this directly
+            color: Vec4::new(1.0, 1.0, 1.0, 1.0),
         }
     }
     
-    pub fn get_radius(&self) -> f64 {
+    pub fn get_color(&self) -> Vec4 {
+        self.color
+    }
+    
+    pub fn set_color(&mut self, color: Vec4) {
+        self.color = color;
+    }
+
+    pub fn get_id(&self) -> usize {
+        self.id
+    }
+    
+    pub fn set_id(&mut self, id: usize) {
+        self.id = id;
+    }
+
+    pub fn get_radius(&self) -> f32 {
         self.radius
     }
 
-    pub fn get_mass(&self) -> f64 {
-        self.density * std::f64::consts::PI * self.radius * self.radius
+    pub fn get_mass(&self) -> f32 {
+        self.density * std::f32::consts::PI * self.radius * self.radius
     }
 
-    pub fn add_acceleration(&mut self, acceleration: DVec2){
+    pub fn add_acceleration(&mut self, acceleration: Vec2){
         self.acceleration += acceleration;
     }
 
-    pub fn get_position(&self) -> DVec2 {
-        self.position  // DVec2 is Copy, so this creates a copy automatically
+    pub fn get_position(&self) -> Vec2 {
+        self.position  // Vec2 is Copy, so this creates a copy automatically
     }
 
-    pub fn get_velocity(&self) -> DVec2 {
+    pub fn get_velocity(&self) -> Vec2 {
         if self.last_dt == 0.0 {
-            DVec2::ZERO  // Return zero velocity for the first frame
+            Vec2::ZERO  // Return zero velocity for the first frame
         } else {
             (self.position - self.last_position) / self.last_dt
         }
     }
 
-    pub fn set_velocity(&mut self, velocity: DVec2, dt: f64) {
+    pub fn set_velocity(&mut self, velocity: Vec2, dt: f32) {
         self.last_position = self.position - velocity * dt;
     }
 
-    pub fn add_velocity(&mut self, velocity: DVec2, dt: f64) {
+    pub fn add_velocity(&mut self, velocity: Vec2, dt: f32) {
         self.last_position -= velocity * dt;
     }
 
-    pub fn set_position(&mut self, position: DVec2) {
+    pub fn set_position(&mut self, position: Vec2) {
         self.position = position;
     }
 
-    pub fn get_acceleration(&self) -> DVec2 {
+    pub fn get_acceleration(&self) -> Vec2 {
         self.last_acceleration
     }
     
-    pub fn get_interpolated_position(&self, alpha: f64) -> DVec2 {
+    pub fn get_interpolated_position(&self, alpha: f32) -> Vec2 {
         self.last_position + (self.position - self.last_position) * alpha
     }
 
-    pub fn update_position(&mut self, dt: f64){
+    pub fn update_position(&mut self, dt: f32){
         let displacement = self.position - self.last_position;
         self.last_position = self.position;
         
+
         self.position += self.acceleration * dt * dt;
         self.position += displacement;
+        println!("{}", self.get_velocity());
 
         self.last_acceleration = self.acceleration;
         self.last_dt = dt;
-        self.acceleration = DVec2::ZERO; // Reset acceleration applied at this frame
+        self.acceleration = Vec2::ZERO; // Reset acceleration applied at this frame
     }
 }
