@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use macroquad::prelude::{clear_background, draw_circle, draw_circle_lines, get_time, is_key_pressed, is_mouse_button_down, mouse_position, next_frame, screen_height, screen_width, draw_text, draw_line, get_fps, BLACK, Color, MouseButton, KeyCode, WHITE};
+use macroquad::{color::{ORANGE, RED}, prelude::{clear_background, draw_circle, draw_circle_lines, draw_line, draw_text, get_fps, is_key_pressed, is_mouse_button_down, mouse_position, next_frame, screen_height, screen_width, Color, KeyCode, MouseButton, BLACK, WHITE}};
 use glam::{vec2, Vec2};
 
 mod physics {
@@ -7,6 +7,16 @@ mod physics {
     pub mod verlet;  // Make sure to add this!
 }
 use physics::{solver::Solver, verlet::Verlet};
+
+use std::time::{SystemTime, UNIX_EPOCH};
+
+
+fn get_time() -> u128 {
+    return SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_millis();
+}
 
 
 #[macroquad::main("Game")]
@@ -20,26 +30,27 @@ async fn main() {
 
     let mut solver = Solver::new(
         &[
-            Verlet::new_with_radius(Vec2::new(screen_width/2.0, screen_height/2.0),
+            Verlet::new_with_radius(vec2(screen_width/2.0, screen_height/2.0),
             50.0),
-            Verlet::new_with_radius(Vec2::new(screen_width/2.0, screen_height/2.0),
+            Verlet::new_with_radius(vec2(screen_width/2.0, screen_height/2.0),
             5.0)
         ],
-        Vec2::new(0.0, 500.0),
+        vec2(0.0, 500.0),
         constraint_radius,
+        10
     );
     if let Err(e) = solver.load_colors("colors.bin") {
         println!("Error loading colors: {}", e);
     }
 
-    let dt = 1.0 / 60.0 / 20.0;  // Fixed 60 FPS physics update - With 8 subdivisions - used for all testing
-    let ball_drop_dt = 0.1;
-    let mouse_drop_dt = 0.1;
-    let (mut accumulator, mut ball_drop_accumulator,mut mouse_drop_accumulator)  = (0.0, 0.0, 0.0);
+    let dt = 16;  // 1 / 60.0 = 16.6 ms
+    let ball_drop_dt = 100;
+    let mouse_drop_dt = 100;
+    let (mut accumulator, mut ball_drop_accumulator, mut mouse_drop_accumulator)  = (0, 0, 0);
 
-    let mut last_time: f64 = get_time();
+    let mut last_time = get_time();
 
-    let mut balls_til_60_fps = 0;
+    let mut balls_til_60_fps: usize = 0;
     let fps_threshold: i32 = 60;
     let measurement_frames: i32 = 30; // Number of frames to confirm slowdown
     let mut slow_frames: i32 = 0;
@@ -50,8 +61,8 @@ async fn main() {
         
     //     ball_drop_accumulator += dt;
     //     if ball_drop_accumulator >= ball_drop_dt && !solver.is_container_full() {
-    //         solver.add_position(Verlet::new_with_velocity(Vec2::new(1.0/2.2 * screen_width, screen_height / 8.0),
-    //                 Vec2::new(0.0, 200.0), dt));
+    //         solver.add_position(Verlet::new_with_velocity(vec2(1.0/2.2 * screen_width, screen_height / 8.0),
+    //                 vec2(0.0, 200.0), dt));
 
     //         ball_drop_accumulator = 0.0;
     //     }
@@ -59,7 +70,7 @@ async fn main() {
     
     loop {
         let current_time = get_time();
-        let frame_time = (current_time - last_time) as f32;
+        let frame_time = current_time - last_time;
         last_time = current_time;
         
         accumulator += frame_time;
@@ -70,7 +81,7 @@ async fn main() {
             if mouse_drop_accumulator >= mouse_drop_dt {
                 let position = vec2(mouse_position().0, mouse_position().1) - vec2(screen_width / 2.0, screen_height / 2.0);
                 solver.add_position(Verlet::new(position));  // Add new position at mouse position
-                mouse_drop_accumulator = 0.0;
+                mouse_drop_accumulator = 0;
             };
         }
         if is_mouse_button_down(MouseButton::Right) {
@@ -111,16 +122,16 @@ async fn main() {
         
         if ball_drop_accumulator >= ball_drop_dt && !solver.is_container_full() {
             // let angle = rand::gen_range(0.0, std::f32::consts::TAU);
-            // solver.add_position(Verlet::new_with_velocity(Vec2::new(screen_width / 2.0, screen_height / 2.0),
-            //         500.0 * Vec2::new(angle.cos(), angle.sin()), dt));
-            let mut ballz = Verlet::new_with_radius(Vec2::new(0.15 * screen_width,0.0), 20.0);
-            ballz.set_velocity(Vec2::new(0.0, 200.0), dt);
+            // solver.add_position(Verlet::new_with_velocity(vec2(screen_width / 2.0, screen_height / 2.0),
+            //         500.0 * vec2(angle.cos(), angle.sin()), dt));
+            let mut ballz = Verlet::new_with_radius(vec2(0.15 * screen_width,0.0), 20.0);
+            ballz.set_velocity(vec2(0.0, 200.0), dt as f32 / 1000.0);
             solver.add_position(ballz);
-            ball_drop_accumulator = 0.0;
+            ball_drop_accumulator = 0;
         }
 
         while accumulator >= dt {
-            solver.update(dt);
+            solver.update(dt as f32 / 1000.0);
             accumulator -= dt;
             
             // if solver.is_container_full() {
@@ -132,7 +143,7 @@ async fn main() {
         clear_background(BLACK);
         draw_circle_lines(screen_width / 2.0, screen_height / 2.0, constraint_radius, 1.0, WHITE);  // Draw constraint circle
         
-        let alpha = accumulator / dt;
+        let alpha = accumulator as f32 / dt as f32;
         for verlet in solver.get_verlets() {
             // This is since the solver imagines the ball at being shows at 0, 0
             let origin = vec2(screen_width / 2.0, screen_height / 2.0);
@@ -144,16 +155,16 @@ async fn main() {
                 verlet.get_color().z as u8,
                 255
             ));
-            // draw_arrow(
-            //     interpolated_pos,
-            //     interpolated_pos + verlet.get_velocity() / 5.0,
-            //     ORANGE
-            // );
-            // draw_arrow(
-            //     interpolated_pos,
-            //     interpolated_pos + verlet.get_acceleration() / 5.0,
-            //     RED
-            // );
+            draw_arrow(
+                interpolated_pos,
+                interpolated_pos + verlet.get_velocity() / 5.0,
+                ORANGE
+            );
+            draw_arrow(
+                interpolated_pos,
+                interpolated_pos + verlet.get_acceleration() / 5.0,
+                RED
+            );
         }
 
         // Enhanced debug display
@@ -222,12 +233,12 @@ fn draw_arrow(start: Vec2, end: Vec2, color: Color) {
     let arrowhead_length = 10.0;
     let arrowhead_angle = (30.0 as f32).to_radians();
 
-    let left_arrowhead = Vec2::new(
+    let left_arrowhead = vec2(
         end.x - arrowhead_length * (direction.x * arrowhead_angle.cos() - direction.y * arrowhead_angle.sin()),
         end.y - arrowhead_length * (direction.x * arrowhead_angle.sin() + direction.y * arrowhead_angle.cos()),
     );
 
-    let right_arrowhead = Vec2::new(
+    let right_arrowhead = vec2(
         end.x - arrowhead_length * (direction.x * arrowhead_angle.cos() + direction.y * arrowhead_angle.sin()),
         end.y - arrowhead_length * (-direction.x * arrowhead_angle.sin() + direction.y * arrowhead_angle.cos()),
     );

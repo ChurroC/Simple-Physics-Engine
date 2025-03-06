@@ -11,11 +11,12 @@ pub struct Solver {
     events: Vec<(f32, bool, usize)>,  // Store persistent events list
     color_frames: Vec<Vec4>,
     current_frame: usize,
+    subdivision: usize,
 }
 
 
 impl Solver {
-    pub fn new(verlets: &[Verlet], gravity: Vec2, constraint_radius: f32) -> Self {
+    pub fn new(verlets: &[Verlet], gravity: Vec2, constraint_radius: f32, subdivision: usize) -> Self {
         let mut events = Vec::new();
         
         for (i, verlet) in verlets.iter().enumerate() {
@@ -34,12 +35,12 @@ impl Solver {
             events,
             color_frames: Vec::new(),
             current_frame: 0,
+            subdivision
         }
     }
     
     pub fn load_colors(&mut self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
         let data = std::fs::read(filename)?;
-        println!("Data: {:?}", data);
         self.color_frames = bincode::deserialize(&data)?;
         self.current_frame = 0;
         for verlet in &mut self.verlets {
@@ -52,13 +53,15 @@ impl Solver {
     }
 
     pub fn update(&mut self, dt: f32) {
-        self.verlets.sort_by(|a, b| a.get_id().cmp(&b.get_id()));
-
-        self.apply_gravity();
-        self.apply_wall_constraints_smooth(dt);
-        let collisions = self.find_collisions_loop();
-        self.solve_collisions(collisions, dt);
-        self.update_positions(dt);
+        let sub_dt = dt / self.subdivision as f32;
+        let sub_gravity = self.gravity / self.subdivision as f32;
+        for _ in 0..self.subdivision {
+            self.apply_sub_gravity(sub_gravity);
+            self.apply_wall_constraints_smooth(sub_dt);
+            let collisions = self.find_collisions_loop();
+            self.solve_collisions(collisions, sub_dt);
+            self.update_positions(sub_dt);
+        }
     }
 
     fn update_positions(&mut self, dt: f32) {
@@ -70,6 +73,11 @@ impl Solver {
     fn apply_gravity(&mut self) {
         for verlet in &mut self.verlets {
             verlet.add_acceleration(self.gravity);
+        }
+    }
+    fn apply_sub_gravity(&mut self, gravity: Vec2) {
+        for verlet in &mut self.verlets {
+            verlet.add_acceleration(gravity);
         }
     }
 

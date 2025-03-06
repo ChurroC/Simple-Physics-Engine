@@ -125,7 +125,9 @@ impl Verlet {
         let displacement = self.position - self.last_position;
         self.last_position = self.position;
         
-        self.position = self.position + displacement + self.acceleration * dt * dt;
+
+        self.position += self.acceleration * dt * dt;
+        self.position += displacement;
 
         self.last_acceleration = self.acceleration;
         self.last_dt = dt;
