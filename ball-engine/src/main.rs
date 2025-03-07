@@ -82,14 +82,8 @@ async fn main() {
 
     let mut solver = Solver::new(
         &[
-            Verlet::new_with_radius(vec2(screen_width/3.0, 0.0),
-            50.0),
-            Verlet::new_with_radius(vec2(screen_width/3.0, screen_height/3.0),
-            20.0),
-            Verlet::new_with_radius(vec2(-screen_width/3.0, 0.0),
-            50.0),
-            Verlet::new_with_radius(vec2(-screen_width/3.0, -screen_height/3.0),
-            20.0)
+            Verlet::new_with_radius(vec2(0.0, 0.0), 20.0),
+            Verlet::new_with_radius(vec2(70.0, 0.0), 20.0),
         ],
         vec2(0.0, -500.0),
         constraint_radius,
@@ -100,9 +94,11 @@ async fn main() {
     }
 
     let dt = 16;  // 1 / 60.0 = 16.6 ms
-    let ball_drop_dt = 100;
     let mouse_drop_dt = 100;
-    let (mut accumulator, mut ball_drop_accumulator, mut mouse_drop_accumulator)  = (0, 0, 0);
+    let (mut accumulator, mut mouse_drop_accumulator)  = (0, 0);
+
+    let frames_till_ball_drop = 10;
+    let mut frames_ball_drop = 0;
 
     let mut last_time = get_time();
     let mut total_time: u128 = 0;
@@ -132,7 +128,6 @@ async fn main() {
         last_time = current_time;
         
         accumulator += frame_time;
-        ball_drop_accumulator += frame_time;
         mouse_drop_accumulator += frame_time;
         
         if is_mouse_button_down(MouseButton::Left) {
@@ -177,28 +172,26 @@ async fn main() {
                 println!("Colors loaded successfully!");
             }
         }
-        
-        if ball_drop_accumulator >= ball_drop_dt && !solver.is_container_full() {
-            // let angle = rand::gen_range(0.0, std::f32::consts::TAU);
-            // solver.add_position(Verlet::new_with_velocity(vec2(screen_width / 2.0, screen_height / 2.0),
-            //         500.0 * vec2(angle.cos(), angle.sin()), dt));
-            println!("screen_width: {}, screen_height: {}", screen_width, screen_height);
-            let mut ball = Verlet::new_with_radius(vec2(0.15 * screen_width, screen_height * 2.0 / 7.0), 20.0);
-            ball.set_velocity(vec2(0.0, 5.0), dt as f32 / 1000.0);
-            solver.add_position(ball);
-            ball_drop_accumulator = 0;
-        }
 
         while accumulator >= dt {
             solver.update(dt as f32 / 1000.0);
             accumulator -= dt;
             total_time += dt;
+            frames_ball_drop += 1;
             
             // if solver.is_container_full() {
                 // println!("{}", solver.is_container_full());
             //     solver.apply_rainbow_gradient();
             // }
-            let time_check = 1 * 1000;
+
+            if frames_ball_drop >= frames_till_ball_drop && !solver.is_container_full() {
+                let mut ball = Verlet::new_with_radius(vec2(0.15 * screen_width, screen_height * 2.0 / 7.0), 10.0);
+                ball.set_velocity(vec2(0.0, -10.0), dt as f32 / 1000.0);
+                solver.add_position(ball);
+                frames_ball_drop = 0;
+            }
+
+            let time_check = 15 * 1000;
             if total_time >= time_check && !determinism_done {
                 let verlet = & solver.get_verlets()[0];
                 let x_str = format!("{:.15}", verlet.get_position().x);
@@ -243,16 +236,16 @@ async fn main() {
                 verlet.get_color().z as u8,
                 255
             ));
-            draw_arrow(
-                interpolated_pos,
-                interpolated_pos + verlet.get_velocity() * Vec2::new(1.0, -1.0) / 5.0,
-                ORANGE
-            );
-            draw_arrow(
-                interpolated_pos,
-                interpolated_pos + verlet.get_acceleration() * Vec2::new(1.0, -1.0) / 5.0,
-                RED
-            );
+            // draw_arrow(
+            //     interpolated_pos,
+            //     interpolated_pos + verlet.get_velocity() * Vec2::new(1.0, -1.0) / 5.0,
+            //     ORANGE
+            // );
+            // draw_arrow(
+            //     interpolated_pos,
+            //     interpolated_pos + verlet.get_acceleration() * Vec2::new(1.0, -1.0) / 5.0,
+            //     RED
+            // );
         }
 
         // Enhanced debug display

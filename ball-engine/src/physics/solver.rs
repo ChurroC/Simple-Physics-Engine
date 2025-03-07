@@ -317,6 +317,7 @@ impl Solver {
         // Consider it full if particles take up more than X% of space
         // Note: Perfect circle packing is ~90.7% efficient
         let density = total_particle_area / container_area;
+        println!("Density: {}", density);
         density > 0.9 // or whatever threshold makes sense
     }
     
