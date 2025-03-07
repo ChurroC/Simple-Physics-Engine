@@ -54,11 +54,10 @@ impl Solver {
 
     pub fn update(&mut self, dt: f32) {
         let sub_dt = dt / self.subdivision as f32;
-        let sub_gravity = self.gravity / self.subdivision as f32;
         for _ in 0..self.subdivision {
-            self.apply_sub_gravity(sub_gravity);
-            self.apply_wall_constraints_smooth(sub_dt);
-            let collisions = self.find_collisions_loop();
+            self.apply_gravity();
+            self.apply_wall_constraints(sub_dt);
+            let collisions: Vec<(usize, usize)> = self.find_collisions_sort_sweep();
             self.solve_collisions(collisions, sub_dt);
             self.update_positions(sub_dt);
         }
@@ -73,11 +72,6 @@ impl Solver {
     fn apply_gravity(&mut self) {
         for verlet in &mut self.verlets {
             verlet.add_acceleration(self.gravity);
-        }
-    }
-    fn apply_sub_gravity(&mut self, gravity: Vec2) {
-        for verlet in &mut self.verlets {
-            verlet.add_acceleration(gravity);
         }
     }
 
@@ -229,7 +223,7 @@ impl Solver {
             if dist < min_dist {
                 let collision_normal = collision_axis.normalize();
                 let collision_perp_normal = collision_axis.perp().normalize();
-                let overlap = min_dist - dist;
+                let overlap = (min_dist - dist) * 1.1;
                 
                 let vel1 = verlet1.get_velocity().project_onto(collision_normal);
                 let vel1_perp = verlet1.get_velocity().project_onto(collision_perp_normal);
