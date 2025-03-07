@@ -87,7 +87,7 @@ async fn main() {
         ],
         vec2(0.0, -500.0),
         constraint_radius,
-        77
+        8
     );
     if let Err(e) = solver.load_colors("colors.bin") {
         println!("Error loading colors: {}", e);
@@ -185,7 +185,7 @@ async fn main() {
             // }
 
             if frames_ball_drop >= frames_till_ball_drop && !solver.is_container_full() {
-                let mut ball = Verlet::new_with_radius(vec2(0.15 * screen_width, screen_height * 2.0 / 7.0), 10.0);
+                let mut ball = Verlet::new_with_radius(vec2(0.15 * screen_width, screen_height * 2.0 / 7.0), 8.0);
                 ball.set_velocity(vec2(0.0, -10.0), dt as f32 / 1000.0);
                 solver.add_position(ball);
                 frames_ball_drop = 0;

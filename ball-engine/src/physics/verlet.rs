@@ -14,8 +14,6 @@ pub struct Verlet {
     density: f32,
     last_dt: f32,
     color: Vec4,
-    is_sleeping: bool,
-    sleep_timer: f32,
 }
 
 impl Verlet {
@@ -31,8 +29,6 @@ impl Verlet {
             density: 1.0,
             last_dt: 0.0,
             color: Vec4::new(rng.gen_range(0.0..256.0), rng.gen_range(0.0..256.0), rng.gen_range(0.0..256.0), 1.0),
-            is_sleeping: false,
-            sleep_timer: 0.0,
         }
     }
     pub fn new_with_radius(position: Vec2, radius: f32) -> Self {
@@ -48,8 +44,6 @@ impl Verlet {
             density: 1.0,
             last_dt: 0.0,
             color: Vec4::new(rng.gen_range(0.0..256.0), rng.gen_range(0.0..256.0), rng.gen_range(0.0..256.0), 1.0),
-            is_sleeping: false,
-            sleep_timer: 0.0,
         }
     }
     pub fn new_with_velocity(position: Vec2, velocity: Vec2, dt: f32) -> Self {
@@ -64,8 +58,6 @@ impl Verlet {
             density: 1.0,
             last_dt: dt, // Set this directly
             color: Vec4::new(rng.gen_range(0.0..256.0), rng.gen_range(0.0..256.0), rng.gen_range(0.0..256.0), 1.0),
-            is_sleeping: false,
-            sleep_timer: 0.0,
         }
     }
     
@@ -129,40 +121,7 @@ impl Verlet {
         self.last_position + (self.position - self.last_position) * alpha
     }
 
-    pub fn is_sleeping(&self) -> bool {
-        self.is_sleeping
-    }
-    
-    pub fn wake_up(&mut self) {
-        self.is_sleeping = false;
-        self.sleep_timer = 0.0;
-    }
-    
-    pub fn try_sleep(&mut self, velocity_threshold: f32, time_threshold: f32, dt: f32) {
-        if self.is_sleeping {
-            return;
-        }
-        
-        let velocity = self.get_velocity().length();
-        
-        if velocity < velocity_threshold {
-            self.sleep_timer += dt;
-            if self.sleep_timer >= time_threshold {
-                self.is_sleeping = true;
-            }
-        } else {
-            self.sleep_timer = 0.0;
-        }
-    }
-
     pub fn update_position(&mut self, dt: f32){
-        if self.is_sleeping {
-            self.last_acceleration = self.acceleration;
-            self.last_dt = dt;
-            self.acceleration = Vec2::ZERO; // Reset acceleration applied at this frame
-            return;
-        }
-
         let displacement = self.position - self.last_position;
         self.last_position = self.position;
         
