@@ -12,6 +12,8 @@ pub struct Solver {
     color_frames: Vec<Vec4>,
     current_frame: usize,
     subdivision: usize,
+    velocity_sleep_threshold: f32,
+    time_sleep_threshold: f32,
 }
 
 
@@ -35,7 +37,9 @@ impl Solver {
             events,
             color_frames: Vec::new(),
             current_frame: 0,
-            subdivision
+            subdivision,
+            velocity_sleep_threshold: 10.0,  // Adjust based on your scale
+            time_sleep_threshold: 0.3,   
         }
     }
     
@@ -54,6 +58,8 @@ impl Solver {
 
     pub fn update(&mut self, dt: f32) {
         let sub_dt = dt / self.subdivision as f32;
+        self.check_sleeping_disturbances();
+
         for _ in 0..self.subdivision {
             self.apply_gravity();
             self.apply_wall_constraints(sub_dt);
@@ -61,7 +67,51 @@ impl Solver {
             self.solve_collisions(collisions, sub_dt);
             self.update_positions(sub_dt);
         }
+        
+        for verlet in &mut self.verlets {
+            verlet.try_sleep(self.velocity_sleep_threshold, self.time_sleep_threshold, dt);
+        }
     }
+
+        // New method to check for sleeping disturbances
+        fn check_sleeping_disturbances(&mut self) {
+            let mut wake_indices = Vec::new();
+            
+            // Find sleeping verlets that need to be woken up
+            for i in 0..self.verlets.len() {
+                if !self.verlets[i].is_sleeping() {
+                    continue;
+                }
+                
+                let pos1 = self.verlets[i].get_position();
+                let radius1 = self.verlets[i].get_radius();
+                
+                // Check against other awake verlets
+                for j in 0..self.verlets.len() {
+                    if i == j || self.verlets[j].is_sleeping() { 
+                        continue; 
+                    }
+                    
+                    let pos2 = self.verlets[j].get_position();
+                    let radius2 = self.verlets[j].get_radius();
+                    let distance = (pos1 - pos2).length();
+                    
+                    // Add a small buffer to the wake distance
+                    let wake_distance = (radius1 + radius2) * 1.2;
+                    
+                    if distance < wake_distance && 
+                       self.verlets[j].get_velocity().length() > self.velocity_sleep_threshold * 0.5 {
+                        wake_indices.push(i);
+                        break;
+                    }
+                }
+            }
+            
+            // Wake up the marked verlets
+            for &idx in &wake_indices {
+                self.verlets[idx].wake_up();
+            }
+        }
 
     fn update_positions(&mut self, dt: f32) {
         for verlet in &mut self.verlets {
@@ -87,6 +137,10 @@ impl Solver {
             let dist = dist_to_cen.length();
             
             if dist > self.constraint_radius - verlet.get_radius() {
+                if verlet.is_sleeping() {
+                    verlet.wake_up();
+                }
+
                 let dist_mag: Vec2 = dist_to_cen.normalize();
 
                 let vel = verlet.get_velocity();
@@ -221,6 +275,11 @@ impl Solver {
             let min_dist = verlet1.get_radius() + verlet2.get_radius();
 
             if dist < min_dist {
+                if verlet1.is_sleeping() || verlet2.is_sleeping() {
+                    verlet1.wake_up();
+                    verlet2.wake_up();
+                }
+
                 let collision_normal = collision_axis.normalize();
                 let collision_perp_normal = collision_axis.perp().normalize();
                 let overlap = (min_dist - dist) * 1.1;
