@@ -5,7 +5,6 @@ use rand::Rng;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Verlet {
-    id: usize,
     position: Vec2,
     last_position: Vec2,
     acceleration: Vec2,
@@ -20,7 +19,6 @@ impl Verlet {
     pub fn new(position: Vec2) -> Self {
         let mut rng = rand::thread_rng();
         Verlet {
-            id: 0,
             position,
             last_position: position,
             acceleration: Vec2::ZERO,
@@ -35,7 +33,6 @@ impl Verlet {
         let mut rng = rand::thread_rng();
         let radius = radius.into();
         Verlet {
-            id: 0,
             position,
             last_position: position,
             acceleration: Vec2::ZERO,
@@ -49,7 +46,6 @@ impl Verlet {
     pub fn new_with_velocity(position: Vec2, velocity: Vec2, dt: f32) -> Self {
         let mut rng = rand::thread_rng();
         Verlet {
-            id: 0,
             position,
             last_position: position - velocity * dt,  // Set this directly
             acceleration: Vec2::ZERO,
@@ -67,14 +63,6 @@ impl Verlet {
     
     pub fn set_color(&mut self, color: Vec4) {
         self.color = color;
-    }
-
-    pub fn get_id(&self) -> usize {
-        self.id
-    }
-    
-    pub fn set_id(&mut self, id: usize) {
-        self.id = id;
     }
 
     pub fn get_radius(&self) -> f32 {

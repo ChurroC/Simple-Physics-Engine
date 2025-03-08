@@ -91,7 +91,7 @@ impl Solver {
         collisions
     }
 
-    fn solve_collisions(&mut self, mut collisions: Vec<(usize, usize)>, dt: f32) {
+    fn solve_collisions(&mut self, collisions: Vec<(usize, usize)>, dt: f32) {
         
         // Force dt to have consistent precision
         let dt_str = format!("{:.15}", dt);

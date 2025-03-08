@@ -26,6 +26,7 @@ impl Solver {
             events.push((pos + radius, true, i));
         }
 
+        //  TimSort - O(n * log(n)) - Gonna use time sort initially since we don't know how in order these balls are
         events.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
 
         Solver {
@@ -37,19 +38,6 @@ impl Solver {
             current_frame: 0,
             subdivision
         }
-    }
-    
-    pub fn load_colors(&mut self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
-        let data = std::fs::read(filename)?;
-        self.color_frames = bincode::deserialize(&data)?;
-        self.current_frame = 0;
-        for verlet in &mut self.verlets {
-            if self.current_frame < self.color_frames.len() {
-                verlet.set_color(self.color_frames[self.current_frame]);
-                self.current_frame += 1;
-            }
-        }
-        Ok(())
     }
 
     pub fn update(&mut self, dt: f32) {
@@ -77,7 +65,7 @@ impl Solver {
 
     // Pezzas way but even more accurate
     // Since his way of moving position creates a velocity spike
-    // When just loses the normal velocity and keep the tangential velocity
+    // We just lose the normal velocity and keep the tangential velocity
     fn apply_wall_constraints_smooth(&mut self, dt: f32) {
         let coefficient_of_restitution = 1.0;
         let constraint_center= vec2(0.0, 0.0);
@@ -122,7 +110,7 @@ impl Solver {
     }
     
     // O(n^2)
-    // 384 balls
+    // 384 balls - 8 subs -  16 ms
     fn find_collisions_loop(&mut self) -> Vec<(usize, usize)> {
         let mut collisions: Vec<(usize, usize)> = Vec::new();
 
@@ -145,7 +133,7 @@ impl Solver {
     }
 
     // O(n log(n))
-    // 991 balls
+    // 991 balls - 8 subs -  16 ms
     fn find_collisions_sort_sweep(&mut self) -> Vec<(usize, usize)> {
         let mut collisions: Vec<(usize, usize)> = Vec::new();
         let len = self.verlets.len();
@@ -261,6 +249,45 @@ impl Solver {
         density > 0.9 // or whatever threshold makes sense
     }
     
+    pub fn get_positions(&self) -> Vec<Vec2> {
+        self.verlets.iter()
+            .map(|verlet| verlet.get_position())
+            .collect()
+    }
+    pub fn add_position(&mut self, mut verlet: Verlet) {
+        if !self.color_frames.is_empty() && self.current_frame < self.color_frames.len() {
+            verlet.set_color(self.color_frames[self.current_frame]);
+            self.current_frame += 1;
+        }
+        self.verlets.push(verlet);
+    }
+    pub fn add_positions(&mut self, verlets: &mut [Verlet]) {
+        for verlet in verlets.iter_mut() {
+            if !self.color_frames.is_empty() && self.current_frame < self.color_frames.len() {
+                verlet.set_color(self.color_frames[self.current_frame]);
+                self.current_frame += 1;
+            }
+        }
+        self.verlets.extend(verlets.iter().cloned());
+    }
+
+    pub fn get_verlets(&self) -> &Vec<Verlet> {
+        &self.verlets
+    }
+
+    pub fn save_state(&self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let encoded = bincode::serialize(&self)?;
+        std::fs::write(filename, encoded)?;
+        Ok(())
+    }
+
+    pub fn load_state(filename: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let data = std::fs::read(filename)?;
+        let solver = bincode::deserialize(&data)?;
+        Ok(solver)
+    }
+    
+    
     pub fn apply_rainbow_gradient(&mut self) {
         // Sort verlets by y position (from bottom to top)
         let mut sorted_indices: Vec<usize> = (0..self.verlets.len()).collect();
@@ -303,46 +330,6 @@ impl Solver {
         }
     }
 
-    pub fn get_positions(&self) -> Vec<Vec2> {
-        self.verlets.iter()
-            .map(|verlet| verlet.get_position())
-            .collect()
-    }
-
-    pub fn add_position(&mut self, mut verlet: Verlet) {
-        if !self.color_frames.is_empty() && self.current_frame < self.color_frames.len() {
-            verlet.set_color(self.color_frames[self.current_frame]);
-            verlet.set_id(self.current_frame);
-            self.current_frame += 1;
-        }
-        self.verlets.push(verlet);
-    }
-    pub fn add_positions(&mut self, verlets: &mut [Verlet]) {
-        for verlet in verlets.iter_mut() {
-            if !self.color_frames.is_empty() && self.current_frame < self.color_frames.len() {
-                verlet.set_color(self.color_frames[self.current_frame]);
-                verlet.set_id(self.current_frame);
-                self.current_frame += 1;
-            }
-        }
-        self.verlets.extend(verlets.iter().cloned());
-    }
-
-    pub fn get_verlets(&self) -> &Vec<Verlet> {
-        &self.verlets
-    }
-
-    pub fn save_state(&self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
-        let encoded = bincode::serialize(&self)?;
-        std::fs::write(filename, encoded)?;
-        Ok(())
-    }
-
-    pub fn load_state(filename: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let data = std::fs::read(filename)?;
-        let solver = bincode::deserialize(&data)?;
-        Ok(solver)
-    }
 
     pub fn color_from_image(&mut self, file_path: &str) -> Result<(), Box<dyn std::error::Error>> {
         let img = image::open(file_path)?;
@@ -424,7 +411,7 @@ impl Solver {
                 let dx = x as f32 - center;
                 let dy = y as f32 - center;
                 let exponent = -(dx * dx + dy * dy) / (2.0 * sigma * sigma);
-                kernel[y][x] = (2.0 * std::f32::consts::PI * sigma * sigma).recip() * exponent.exp();
+                kernel[y][x] = 1.0 / (2.0 * std::f32::consts::PI * sigma * sigma) * exponent.exp();
             }
         }
         
@@ -437,6 +424,19 @@ impl Solver {
         }
         
         kernel
+    }
+
+    pub fn load_colors(&mut self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let data = std::fs::read(filename)?;
+        self.color_frames = bincode::deserialize(&data)?;
+        self.current_frame = 0;
+        for verlet in &mut self.verlets {
+            if self.current_frame < self.color_frames.len() {
+                verlet.set_color(self.color_frames[self.current_frame]);
+                self.current_frame += 1;
+            }
+        }
+        Ok(())
     }
 
     pub fn save_colors(&self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {

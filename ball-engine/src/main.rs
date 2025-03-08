@@ -55,19 +55,6 @@ async fn main() {
     let measurement_frames: i32 = 30; // Number of frames to confirm slowdown
     let mut slow_frames_accumulator: i32 = 0;
     let mut balls_til_60_fps: usize = 0;
-
-    // This is too force the simulation forward
-    // for _ in 0..((60.0 / dt) as i32) {
-    //     solver.update(dt);
-        
-    //     ball_drop_accumulator += dt;
-    //     if ball_drop_accumulator >= ball_drop_dt && !solver.is_container_full() {
-    //         solver.add_position(Verlet::new_with_velocity(vec2(1.0/2.2 * screen_width, screen_height / 8.0),
-    //                 vec2(0.0, 200.0), dt));
-
-    //         ball_drop_accumulator = 0.0;
-    //     }
-    // }
     
     loop {
         let current_time = get_time();
