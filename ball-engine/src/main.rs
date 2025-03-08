@@ -1,10 +1,10 @@
 #![allow(dead_code)]
-use macroquad::{color::{ORANGE, RED}, prelude::{clear_background, draw_circle, draw_circle_lines, draw_line, draw_text, get_fps, is_key_pressed, is_mouse_button_down, mouse_position, next_frame, screen_height, screen_width, Color, KeyCode, MouseButton, BLACK, WHITE}};
+use macroquad::prelude::{clear_background, draw_circle, draw_circle_lines, draw_line, draw_text, get_fps, is_key_pressed, is_mouse_button_down, mouse_position, next_frame, screen_height, screen_width, Color, KeyCode, MouseButton, BLACK, WHITE, ORANGE, RED};
 use glam::{vec2, Vec2};
 
 mod physics {
     pub mod solver;
-    pub mod verlet;  // Make sure to add this!
+    pub mod verlet; 
 }
 use physics::{solver::Solver, verlet::Verlet};
 
@@ -14,62 +14,6 @@ use std::fs::File;
 use std::io::Write;
 use std::io::Read;
 use serde_json::{json, Value};
-
-
-fn get_time() -> u128 {
-    return SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_millis();
-}
-
-fn write_data(info1: String, info2: String) {
-    let mut contents = String::new();
-    let mut data: Value = match File::open("output.json") {
-        Ok(mut file) => {
-            file.read_to_string(&mut contents).expect("Failed to read file");
-
-            // Check if the file is empty
-            if contents.trim().is_empty() {
-                // Initialize with an empty object containing a "ball" array
-                json!({ "ball1": [], "ball2": [] })
-            } else {
-                // Parse the JSON data
-                serde_json::from_str(&contents).expect("Failed to parse JSON")
-            }
-        }
-        Err(_) => {
-            // If the file doesn't exist, create it with an empty object containing a "ball" array
-            json!({ "ball1": [], "ball2": [] })
-        }
-    };
-
-    // Append the ball's position to the JSON array
-    if let Value::Object(ref mut object) = data {
-        if let Some(Value::Array(ref mut ball_array)) = object.get_mut("ball1") {
-            ball_array.push(json!(info1));
-        } else {
-            // If "ball" is not an array, replace it with an array containing the new position
-            object.insert("ball1".to_string(), json!([format!("womp womp")]));
-        }
-    }
-    if let Value::Object(ref mut object) = data {
-        if let Some(Value::Array(ref mut ball_array)) = object.get_mut("ball2") {
-            ball_array.push(json!(info2));
-        } else {
-            // If "ball" is not an array, replace it with an array containing the new position
-            object.insert("ball2".to_string(), json!([format!("womp womp")]));
-        }
-    }
-
-    // Write the updated JSON data back to the file
-    let mut file = File::create("output.json").expect("Failed to create file");
-    let json_string = serde_json::to_string_pretty(&data).expect("Failed to serialize JSON");
-    file.write_all(json_string.as_bytes()).expect("Failed to write to file");
-
-    println!("Determinism test complete");
-}
-
 
 #[macroquad::main("Game")]
 async fn main() {
@@ -94,20 +38,23 @@ async fn main() {
     }
 
     let dt = 16;  // 1 / 60.0 = 16.6 ms
-    let mouse_drop_dt = 100;
-    let (mut accumulator, mut mouse_drop_accumulator)  = (0, 0);
+    let mut accumulator = 0;
 
-    let frames_till_ball_drop = 10;
-    let mut frames_ball_drop = 0;
+    let mouse_drops_per_ms = 100;
+    let mut mouse_drop_accumulator = 0;
+
+    let ball_drop_per_ms = 10;
+    let mut ball_drop_accumlator = 0;
 
     let mut last_time = get_time();
     let mut total_time: u128 = 0;
-    let mut determinism_done = false;
+    
+    let mut print_data = false;
 
-    let mut balls_til_60_fps: usize = 0;
     let fps_threshold: i32 = 60;
     let measurement_frames: i32 = 30; // Number of frames to confirm slowdown
-    let mut slow_frames: i32 = 0;
+    let mut slow_frames_accumulator: i32 = 0;
+    let mut balls_til_60_fps: usize = 0;
 
     // This is too force the simulation forward
     // for _ in 0..((60.0 / dt) as i32) {
@@ -125,13 +72,57 @@ async fn main() {
     loop {
         let current_time = get_time();
         let frame_time = current_time - last_time;
+        let fps = 1.0 / (frame_time as f32 / 1000.0);
         last_time = current_time;
         
         accumulator += frame_time;
         mouse_drop_accumulator += frame_time;
-        
+
+        while accumulator >= dt {
+            solver.update(dt as f32 / 1000.0);
+            accumulator -= dt;
+            total_time += dt;
+            ball_drop_accumlator += 1;
+
+            if ball_drop_accumlator >= ball_drop_per_ms && !solver.is_container_full() {
+                let mut ball = Verlet::new_with_radius(vec2(0.15 * screen_width, screen_height * 2.0 / 7.0), 8.0);
+                ball.set_velocity(vec2(0.0, -10.0), dt as f32 / 1000.0);
+                solver.add_position(ball);
+                ball_drop_accumlator = 0;
+            }
+
+            let time_check = 3 * 1000;
+            if total_time >= time_check && !print_data {
+                for i in 0..1 {
+                    let verlet = &solver.get_verlets()[i];
+                    
+                    let alpha_goal = time_check as f32 + 200.0;
+                    let alpha = (alpha_goal - total_time as f32) / (dt as f32);
+
+                    let (x, y) = verlet.get_position().into();
+                    let (x_inter, y_inter) = verlet.get_interpolated_position(alpha).into();
+
+                    let data = json!({
+                        "read_time": {
+                            "time": total_time as f32 / 1000.0,
+                            "x": x,
+                            "y": y,
+                        },
+                        "goal_time": {
+                            "time": alpha_goal / 1000.0,
+                            "x_inter": x_inter,
+                            "y_inter": y_inter,
+                        }
+                    });
+
+                    write_data(format!("{i}-ball"), data);
+                }
+                print_data = true;
+            }
+        }
+
         if is_mouse_button_down(MouseButton::Left) {
-            if mouse_drop_accumulator >= mouse_drop_dt {
+            if mouse_drop_accumulator >= mouse_drops_per_ms {
                 let position = vec2(mouse_position().0, mouse_position().1) - vec2(screen_width / 2.0, screen_height / 2.0);
                 solver.add_position(Verlet::new(position));  // Add new position at mouse position
                 mouse_drop_accumulator = 0;
@@ -172,54 +163,6 @@ async fn main() {
                 println!("Colors loaded successfully!");
             }
         }
-
-        while accumulator >= dt {
-            solver.update(dt as f32 / 1000.0);
-            accumulator -= dt;
-            total_time += dt;
-            frames_ball_drop += 1;
-            
-            // if solver.is_container_full() {
-                // println!("{}", solver.is_container_full());
-            //     solver.apply_rainbow_gradient();
-            // }
-
-            if frames_ball_drop >= frames_till_ball_drop && !solver.is_container_full() {
-                let mut ball = Verlet::new_with_radius(vec2(0.15 * screen_width, screen_height * 2.0 / 7.0), 8.0);
-                ball.set_velocity(vec2(0.0, -10.0), dt as f32 / 1000.0);
-                solver.add_position(ball);
-                frames_ball_drop = 0;
-            }
-
-            let time_check = 15 * 1000;
-            if total_time >= time_check && !determinism_done {
-                let verlet = & solver.get_verlets()[0];
-                let x_str = format!("{:.15}", verlet.get_position().x);
-                let y_str = format!("{:.15}", verlet.get_position().y);
-                let alpha_goal = time_check as f32 + 500.0;
-                let alpha = (alpha_goal - total_time as f32) / (dt as f32);
-                println!("{}", alpha_goal - total_time as f32);
-                println!("{}", alpha);
-                let x_str_inter = format!("{:.15}", verlet.get_interpolated_position(alpha).x);
-                let y_str_inter = format!("{:.15}", verlet.get_interpolated_position(alpha).y);
-                let position_str1 = format!("{}, {}: {} --- {}, {}: {}", x_str, y_str, total_time as f32 / 1000.0, x_str_inter, y_str_inter, alpha_goal / 1000.0);
-
-                
-                let verlet = & solver.get_verlets()[1];
-                let x_str = format!("{:.15}", verlet.get_position().x);
-                let y_str = format!("{:.15}", verlet.get_position().y);
-                let alpha_goal = time_check as f32 + 500.0;
-                let alpha = (alpha_goal - total_time as f32) / (dt as f32);
-                println!("{}", alpha_goal - total_time as f32);
-                println!("{}", alpha);
-                let x_str_inter = format!("{:.15}", verlet.get_interpolated_position(alpha).x);
-                let y_str_inter = format!("{:.15}", verlet.get_interpolated_position(alpha).y);
-                let position_str2 = format!("{}, {}: {} --- {}, {}: {}", x_str, y_str, total_time as f32 / 1000.0, x_str_inter, y_str_inter, alpha_goal / 1000.0);
-
-                write_data(position_str1, position_str2);
-                determinism_done = true;
-            }
-        }
         
         clear_background(BLACK);
         draw_circle_lines(screen_width / 2.0, screen_height / 2.0, constraint_radius, 1.0, WHITE);  // Draw constraint circle
@@ -248,57 +191,35 @@ async fn main() {
             // );
         }
 
-        // Enhanced debug display
-        draw_text(
-            &format!(
-                "FPS: {}", 
-                get_fps(),
-            ),
-            20.0,
-            30.0,
-            30.0,
-            WHITE
-        );
-        draw_text(
-            &format!(
-                "Verlets: {}", 
-                solver.get_verlets().len(),
-            ),
-            20.0,
-            65.0,
-            30.0,
-            WHITE
-        );
-        draw_text(
-            &format!(
-                "dt: {:.4}", 
-                dt,
-            ),
-            20.0,
-            100.0,
-            30.0,
-            WHITE
-        );
-        
-        // In your main loop:
-        if get_fps() < fps_threshold && balls_til_60_fps == 0 {  // Only track if we haven't found threshold
-            slow_frames += 1;
-            if slow_frames >= measurement_frames {
+        if get_fps() < fps_threshold && balls_til_60_fps == 0 {
+            slow_frames_accumulator += 1;
+            if slow_frames_accumulator >= measurement_frames {
                 balls_til_60_fps = solver.get_verlets().len();
             }
-        } else if balls_til_60_fps == 0 {  // Only reset if we haven't found threshold
-            slow_frames = 0;  // Reset if FPS recovers
+        } else if balls_til_60_fps == 0 {
+            slow_frames_accumulator = 0;
         }
-        draw_text(
-            &format!(
-                "60 fps ball count: {}", 
-                balls_til_60_fps,
-            ),
+        draw_texts(
+            &[
+                &format!(
+                    "FPS: {fps:.0}",
+                ),
+                &format!(
+                    "time: {:.3}", total_time as f32 / 1000.0
+                ),
+                &format!(
+                    "Verlets: {}", solver.get_verlets().len()
+                ),
+                &format!(
+                    "60 fps ball count: {balls_til_60_fps}"
+                ),
+            ],
             20.0,
-            135.0,
+            30.0,
             30.0,
             WHITE
         );
+
         next_frame().await;
     }
 }
@@ -327,4 +248,58 @@ fn draw_arrow(start: Vec2, end: Vec2, color: Color) {
     // Draw the arrowhead
     draw_line(end.x, end.y, left_arrowhead.x, left_arrowhead.y, 2.0, color);
     draw_line(end.x, end.y, right_arrowhead.x, right_arrowhead.y, 2.0, color);
+}
+
+fn draw_texts(texts: &[&str], x: f32, y: f32, size: f32, color: Color) {
+    for (i, text) in texts.iter().enumerate() {
+        draw_text(text, x, y + i as f32 * size, size, color);
+    }
+}
+
+fn get_time() -> u128 {
+    return SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_millis();
+}
+
+fn write_data(index: String, data: Value) {
+    let mut contents = String::new();
+    let data = match File::open("output.json") {
+        Ok(mut file) => {
+            file.read_to_string(&mut contents).expect("Failed to read file");
+            // Check if the file is empty
+            if contents.trim().is_empty() {
+                // Initialize with an empty object containing a "ball" array
+                json!({ index: [data] })
+            } else {
+                // Parse the JSON data
+                let mut json_data: Value = serde_json::from_str(&contents).expect("Failed to parse JSON");
+
+                if let Value::Object(ref mut object) = json_data {
+                    if let Some(Value::Array(ref mut array)) = object.get_mut(&index) {
+                        // If the index already exists and is an array, append the data to it
+                        array.push(data);
+                    } else {
+                        // If the index doesn't exist or isn't an array, create a new array with the data
+                        object.insert(index, json!([data]));
+                    }
+                    json_data
+                } else {
+                    // If the JSON isn't an object, create a new one with an array at the specified index
+                    json!({ index: [data] })
+                }
+            }
+        }
+        Err(_) => {
+            // If the file doesn't exist, create it with an empty object containing a "ball" array
+            json!({ index: [data] })
+        }
+    };
+
+    let mut file = File::create("output.json").expect("Failed to create file");
+    let json_string = serde_json::to_string_pretty(&data).expect("Failed to serialize JSON");
+    file.write_all(json_string.as_bytes()).expect("Failed to write to file");
+
+    println!("Determinism test complete");
 }
