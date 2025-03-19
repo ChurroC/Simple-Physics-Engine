@@ -120,7 +120,7 @@ impl Solver {
     }
     
     // O(n^2)
-    // 384 balls - 8 subs -  16 ms
+    // 371 balls - 6 rad - 8 subs - 16 ms
     fn find_collisions_loop(&mut self) -> Vec<(usize, usize)> {
         let mut collisions: Vec<(usize, usize)> = Vec::new();
 
@@ -143,7 +143,7 @@ impl Solver {
     }
 
     // O(n log(n))
-    // 991 balls - 8 subs -  16 ms
+    // 884 balls - 6 rad - 8 subs - 16 ms
     fn find_collisions_sort_sweep(&mut self) -> Vec<(usize, usize)> {
         let mut collisions: Vec<(usize, usize)> = Vec::new();
         let len = self.verlets.len();
@@ -206,6 +206,7 @@ impl Solver {
         collisions
     }
 
+    // 1322 balls - 6 rad - 8 subs - 16 ms
     fn find_collisions_space_partitioning(&mut self) -> Vec<(usize, usize)> {
         let mut collisions: Vec<(usize, usize)> = vec![];
 
@@ -241,15 +242,11 @@ impl Solver {
                         collisions.push((particle_i.min(particle_j), particle_i.max(particle_j)));
                     }
 
-                    let neighbor_offsets: [(i32, i32); 8] = [
+                    let neighbor_offsets: [(i32, i32); 4] = [
                         (1, 0),    // right
                         (1, 1),    // bottom-right
                         (0, 1),    // bottom
                         (-1, 1),   // bottom-left
-                        (-1, 0),   // left
-                        (-1, -1),  // top-left
-                        (0, -1),   // top
-                        (1, -1),   // top-right
                     ];
 
                     // Check against particles in neighboring cells

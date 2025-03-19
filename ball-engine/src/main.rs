@@ -25,6 +25,8 @@ async fn main() {
     // Calculate constraint radius
     let constraint_radius = screen_height.min(screen_width) / 2.0 - 50.0;
 
+    let ball_size = 6.0;
+
     let mut solver = Solver::new(
         &[
             // Verlet::new_with_radius(vec2(0.0, 0.0), 20.0),
@@ -33,7 +35,7 @@ async fn main() {
         vec2(0.0, -500.0),
         constraint_radius,
         8,
-        8.0 * 2.5,
+        ball_size * 2.5,
     );
     if let Err(e) = solver.load_colors("colors.bin") {
         println!("Error loading colors: {}", e);
@@ -74,7 +76,7 @@ async fn main() {
             ball_drop_accumlator += 1;
 
             if ball_drop_accumlator >= ball_drop_per_ms && !solver.is_container_full() {
-                let mut ball = Verlet::new_with_radius(vec2(0.15 * screen_width, screen_height * 2.0 / 7.0), 8.0);
+                let mut ball = Verlet::new_with_radius(vec2(0.15 * screen_width, screen_height * 2.0 / 7.0), ball_size);
                 ball.set_velocity(vec2(0.0, -10.0), dt as f32 / 1000.0);
                 solver.add_position(ball);
                 ball_drop_accumlator = 0;
@@ -112,9 +114,8 @@ async fn main() {
 
         if is_mouse_button_down(MouseButton::Left) {
             if mouse_drop_accumulator >= mouse_drops_per_ms {
-                let origin = vec2(screen_width / 2.0, screen_height / 2.0);
-                let position = origin + vec2(mouse_position().0, mouse_position().1) - vec2(screen_width / 2.0, screen_height / 2.0) * vec2(1.0, -1.0);
-                solver.add_position(Verlet::new(position));  // Add new position at mouse position
+                let position = (vec2(mouse_position().0, mouse_position().1) - vec2(screen_width / 2.0, screen_height / 2.0)) * vec2(1.0, -1.0);
+                solver.add_position(Verlet::new_with_radius(position, ball_size));  // Add new position at mouse position
                 mouse_drop_accumulator = 0;
             };
         }
