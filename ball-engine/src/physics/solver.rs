@@ -1,3 +1,5 @@
+use std::vec;
+
 use super::verlet::Verlet;
 use glam::{vec2, Vec2, Vec4};
 use serde::{Serialize, Deserialize};
@@ -12,11 +14,14 @@ pub struct Solver {
     color_frames: Vec<Vec4>,
     current_frame: usize,
     subdivision: usize,
+    cell_size: f32,
+    grid_size: usize,
+    grid: Vec<Vec<usize>>,
 }
 
 
 impl Solver {
-    pub fn new(verlets: &[Verlet], gravity: Vec2, constraint_radius: f32, subdivision: usize) -> Self {
+    pub fn new(verlets: &[Verlet], gravity: Vec2, constraint_radius: f32, subdivision: usize, cell_size: f32) -> Self {
         let mut events = Vec::new();
         
         for (i, verlet) in verlets.iter().enumerate() {
@@ -29,6 +34,8 @@ impl Solver {
         //  TimSort - O(n * log(n)) - Gonna use time sort initially since we don't know how in order these balls are
         events.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
 
+        let grid_size = (constraint_radius * 2.0 / cell_size) as usize; 
+
         Solver {
             verlets: verlets.iter().cloned().collect(),
             gravity,
@@ -36,7 +43,10 @@ impl Solver {
             events,
             color_frames: Vec::new(),
             current_frame: 0,
-            subdivision
+            subdivision,
+            cell_size: cell_size,
+            grid_size: grid_size,
+            grid: vec![vec![]; grid_size],
         }
     }
 
@@ -193,6 +203,63 @@ impl Solver {
             }
         }
     
+        collisions
+    }
+
+    fn find_collisions_space_partitioning(&mut self) {
+        let mut collisions: Vec<(usize, usize)> = vec![];
+
+        for cell in &mut self.grid {
+            cell.clear();
+        }
+
+        for (i, verlet) in self.verlets.iter().enumerate() {
+            let pos = verlet.get_position();
+            
+            let cell_x = ((pos.x + self.constraint_radius) / self.cell_size).floor() as usize;
+            let cell_y = ((pos.y + self.constraint_radius) / self.cell_size).floor() as usize;
+            
+            let cell_index = (cell_y * self.grid_size) + cell_x;
+            if cell_index < self.grid.len() {
+                self.grid[cell_index].push(i);
+            }
+        }
+        for y in 0..self.grid_size {
+            for x in 0..self.grid_size {
+                let cell_index = y * self.grid_size + x;
+                
+                // Check collisions within this cell
+                let particles_in_cell = &self.grid[cell_index];
+                for i in 0..particles_in_cell.len() {
+                    let particle_i = particles_in_cell[i];
+                    
+                    // Check against other particles in the same cell
+                    for j in (i + 1)..particles_in_cell.len() {
+                        let particle_j = particles_in_cell[j];
+                        collisions.push((i, j));
+                    }
+
+                    let neighboring_indices: [(usize, usize); 4] = [
+                        (x - 1, y),
+                        (x + 1, y),
+                        (x, y - 1),
+                        (x, y + 1),
+                    ];
+
+                    // Check against particles in neighboring cells
+                    for (nx, ny) in neighboring_indices {
+                        if nx >= 0 && nx < self.grid_size && 
+                        ny >= 0 && ny < self.grid_size {
+                            let neighbor_index = (ny * self.grid_size) + nx;
+                            for &particle_j in &self.grid[neighbor_index] {
+                                collisions.push((particle_i, particle_j));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
         collisions
     }
 

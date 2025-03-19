@@ -8,8 +8,10 @@ https://www.gafferongames.com/post/fix_your_timestep/ - Peak
 https://leanrada.com/notes/sweep-and-prune/
 https://developer.nvidia.com/gpugems/gpugems3/part-v-physics-simulation/chapter-32-broad-phase-collision-detection-cuda
 https://lisyarus.github.io/blog/posts/perfect-collisions.html#section-you-spin
+https://gameprogrammingpatterns.com/spatial-partition.html
 
 TODO:
+Gonna implemnt Spacial PArititoning but not kd trees cause there's no need cause I can track the biggest item in my objects and don't need to rebuild the kd tree every frame
 Chains
 implent CCD for high speeds
 
