@@ -11,15 +11,14 @@ https://lisyarus.github.io/blog/posts/perfect-collisions.html#section-you-spin
 https://gameprogrammingpatterns.com/spatial-partition.html
 
 TODO:
-Chains
-implent CCD for high speeds
+parallize the space partioning
+chains
 
-
-// 1. Broad phase - quick check using spatial grid
-// 2. Medium phase - swept AABB check
-// 3. Narrow phase - Only do expensive CCD on likely collisions
-// 4. Batch handle collisions in time-sliced chunks
-
+FOLDERS:
+main-engine - This is the one I started of with and has all my ideas and all the different codes
+simple-engine - This is my best simple engine with space partioning
+constraint-engine - This is the same as simple-engine but with contraints for links and soft bodies
+3D-engine - This is the same as constraint-engine but in 3D with WGPU
 
 FUTURE OTHER PROJECTS:
 Fluid dynamics

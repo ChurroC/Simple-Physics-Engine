@@ -1,9 +1,9 @@
-use std::vec;
-
 use super::verlet::Verlet;
-use glam::{vec2, Vec2, Vec4};
+use glam::{Vec2, Vec4};
 use serde::{Serialize, Deserialize};
 use bincode;
+use std::thread;
+
 
 #[derive(Serialize, Deserialize)]
 pub struct Solver {
@@ -17,12 +17,11 @@ pub struct Solver {
     cell_size: f32,
     grid_size: usize,
     grid: Vec<Vec<usize>>,
-    continuous_collision_detection: bool,
 }
 
 
 impl Solver {
-    pub fn new(verlets: &[Verlet], gravity: Vec2, constraint_radius: f32, subdivision: usize, cell_size: f32, continuous_collision_detection: bool) -> Self {
+    pub fn new(verlets: &[Verlet], gravity: Vec2, constraint_radius: f32, subdivision: usize, cell_size: f32) -> Self {
         let mut events = Vec::new();
         
         for (i, verlet) in verlets.iter().enumerate() {
@@ -48,84 +47,17 @@ impl Solver {
             cell_size: cell_size,
             grid_size: grid_size,
             grid: vec![vec![]; grid_size * grid_size],
-            continuous_collision_detection: continuous_collision_detection,
         }
     }
 
     pub fn update(&mut self, dt: f32) {
-        if !self.continuous_collision_detection {
-            let sub_dt = dt / self.subdivision as f32;
-            for _ in 0..self.subdivision {
-                self.apply_gravity();
-                self.apply_wall_constraints(sub_dt);
-                let collisions: Vec<(usize, usize)> = self.find_collisions_space_partitioning();
-                self.solve_collisions(collisions, sub_dt);
-                self.update_positions(sub_dt);
-            }
-        } else {
+        let sub_dt = dt / self.subdivision as f32;
+        for _ in 0..self.subdivision {
             self.apply_gravity();
-        
-            let mut remaining_time = dt;
-            
-            while remaining_time > 1e-6 {  // Small epsilon to prevent infinite loops
-                // Find earliest wall collision time
-                let mut earliest_collision_time = remaining_time;
-                let mut collision_idx = None;
-                
-                // Check all objects for potential wall collisions
-                for (i, verlet) in self.verlets.iter().enumerate() {
-                    let pos = verlet.get_position();
-                    let vel = verlet.get_velocity();
-                    let radius = verlet.get_radius();
-                    
-                    // Calculate time to wall collision
-                    let dist_to_center = pos.length();
-                    
-                    // Only check if moving toward boundary
-                    if vel.dot(pos) > 0.0 && dist_to_center < self.constraint_radius - radius {
-                        // Solve quadratic equation for wall intersection
-                        let a = vel.dot(vel);
-                        let b = 2.0 * pos.dot(vel);
-                        let c = pos.dot(pos) - (self.constraint_radius - radius).powi(2);
-                        
-                        let discriminant = b * b - 4.0 * a * c;
-                        
-                        if discriminant >= 0.0 {
-                            // Find the positive root (time of collision)
-                            let t = (-b + discriminant.sqrt()) / (2.0 * a);
-                            
-                            // If collision happens within remaining time and is earlier than any found so far
-                            if t > 0.0 && t < earliest_collision_time {
-                                earliest_collision_time = t;
-                                collision_idx = Some(i);
-                            }
-                        }
-                    }
-                }
-
-                
-                self.apply_gravity();
-                self.update_positions(earliest_collision_time);
-                let collisions: Vec<(usize, usize)> = self.find_collisions_space_partitioning();
-                self.solve_collisions(collisions, earliest_collision_time);
-
-                if let Some(idx) = collision_idx {
-                    let verlet = &mut self.verlets[idx];
-                    let coefficient_of_restitution = 1.0;
-
-                    let dist_to_cen = verlet.get_position();
-                    let dist_norm = dist_to_cen.normalize();
-
-                    let vel = verlet.get_velocity();
-                    let v_norm = vel.project_onto(dist_norm);
-
-                    let correct_position = dist_norm * (self.constraint_radius - verlet.get_radius());
-                    verlet.set_position(correct_position);
-                    verlet.set_velocity( (vel - 2.0 * v_norm) * coefficient_of_restitution, earliest_collision_time); // Just push the portion normal to the wall inverse
-                }
-                
-                remaining_time -= earliest_collision_time;
-            }
+            self.apply_wall_constraints(sub_dt);
+            let collisions: Vec<(usize, usize)> = self.find_collisions_space_partitioning();
+            self.solve_collisions(collisions, sub_dt);
+            self.update_positions(sub_dt);
         }
     }
 
@@ -186,7 +118,7 @@ impl Solver {
     }
     
     // O(n^2)
-    // 371 balls - 6 rad - 8 subs - 16 ms
+    // 371 balls - 6 rad - 8 subs - 16 ms - -100 grav - -.250 grav
     fn find_collisions_loop(&mut self) -> Vec<(usize, usize)> {
         let mut collisions: Vec<(usize, usize)> = Vec::new();
 
@@ -338,6 +270,107 @@ impl Solver {
         }
         
         collisions
+    }
+
+    fn find_collisions_space_partitioning_parallel(&mut self) -> Vec<(usize, usize)> {
+        for cell in &mut self.grid {
+            cell.clear();
+        }
+
+        for (i, verlet) in self.verlets.iter().enumerate() {
+            let pos = verlet.get_position();
+            
+            let cell_x = ((pos.x + self.constraint_radius) / self.cell_size).floor() as usize;
+            let cell_y = ((pos.y + self.constraint_radius) / self.cell_size).floor() as usize;
+            
+            let cell_index = (cell_y * self.grid_size) + cell_x;
+            if cell_index < self.grid.len() {
+                self.grid[cell_index].push(i);
+            }
+        }
+
+        let mut handles = vec![];
+        
+        // Split grid into 2×2 regions
+        let half_rows = self.grid_size / 2;
+        let half_cols = self.grid_size / 2;
+        
+        // Create 4 regions: (0,0), (0,1), (1,0), (1,1)
+        let regions = [
+            (0, 0, half_cols, half_rows),
+            (half_cols, 0, self.grid_size, half_rows),
+            (0, half_rows, half_cols, self.grid_size),
+            (half_cols, half_rows, self.grid_size, self.grid_size),
+        ];
+
+        let neighbor_offsets: [(i32, i32); 4] = [
+            (1, 0),    // right
+            (1, 1),    // bottom-right
+            (0, 1),    // bottom
+            (-1, 1),   // bottom-left
+        ];
+
+        
+        let grid_size = self.grid_size;
+
+        for (start_col, start_row, end_col, end_row) in regions {
+            let grid_clone = self.grid.clone();
+
+            let handle = thread::spawn(move || {
+                let mut local_collisions = Vec::new();
+
+                for y in start_row..end_row {
+                    for x in start_col..end_col {
+                        let cell_index = y * grid_size + x;
+                        
+                        // Check collisions within this cell
+                        let particles_in_cell = &grid_clone[cell_index];
+                        for i in 0..particles_in_cell.len() {
+                            let particle_i = particles_in_cell[i];
+                            
+                            // Check against other particles in the same cell
+                            for j in (i + 1)..particles_in_cell.len() {
+                                let particle_j = particles_in_cell[j];
+                                local_collisions.push((particle_i.min(particle_j), particle_i.max(particle_j)));
+                            }
+        
+        
+                            // Check against particles in neighboring cells
+                            for &(dx, dy) in &neighbor_offsets {
+                                let nx = x as i32 + dx;
+                                let ny = y as i32 + dy;
+                                
+                                // Check if neighbor is in bounds
+                                if nx >= 0 && nx < grid_size as i32 && 
+                                   ny >= 0 && ny < grid_size as i32 {
+                                    let neighbor_index = (ny as usize * grid_size) + nx as usize;
+                                    
+                                    // Check against all particles in the neighboring cell
+                                    for &particle_j in &grid_clone[neighbor_index] {
+                                        local_collisions.push((particle_i.min(particle_j), particle_i.max(particle_j)));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                local_collisions
+            });
+
+            handles.push(handle);
+        }
+
+
+        let mut all_collisions = Vec::new();
+        for handle in handles {
+            match handle.join() {
+                Ok(thread_collisions) => all_collisions.extend(thread_collisions),
+                Err(_) => eprintln!("A thread panicked!"),
+            }
+        }
+        
+        all_collisions
     }
 
     fn solve_collisions(&mut self, collisions: Vec<(usize, usize)>, dt: f32) {

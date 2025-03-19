@@ -1,9 +1,9 @@
-use glam::{Vec2, Vec4};
+use glam::{Vec2, Vec4, vec4};
+use serde::{Serialize, Deserialize};
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Verlet {
-    id: usize,
     position: Vec2,
     last_position: Vec2,
     acceleration: Vec2,
@@ -17,7 +17,6 @@ pub struct Verlet {
 impl Verlet {
     pub fn new(position: Vec2) -> Self {
         Verlet {
-            id: 0,
             position,
             last_position: position,
             acceleration: Vec2::ZERO,
@@ -25,34 +24,7 @@ impl Verlet {
             radius: 9.0,
             density: 1.0,
             last_dt: 0.0,
-            color: Vec4::new(1.0, 1.0, 1.0, 1.0),
-        }
-    }
-    pub fn new_with_radius(position: Vec2, radius: f32) -> Self {
-        let radius = radius.into();
-        Verlet {
-            id: 0,
-            position,
-            last_position: position,
-            acceleration: Vec2::ZERO,
-            last_acceleration: Vec2::ZERO,
-            radius: radius,
-            density: 1.0,
-            last_dt: 0.0,
-            color: Vec4::new(1.0, 1.0, 1.0, 1.0),
-        }
-    }
-    pub fn new_with_velocity(position: Vec2, velocity: Vec2, dt: f32) -> Self {
-        Verlet {
-            id: 0,
-            position,
-            last_position: position - velocity * dt,  // Set this directly
-            acceleration: Vec2::ZERO,
-            last_acceleration: Vec2::ZERO,
-            radius: 9.0,
-            density: 1.0,
-            last_dt: dt, // Set this directly
-            color: Vec4::new(1.0, 1.0, 1.0, 1.0),
+            color: vec4(255.0, 255.0, 255.0, 1.0),
         }
     }
     
@@ -64,16 +36,12 @@ impl Verlet {
         self.color = color;
     }
 
-    pub fn get_id(&self) -> usize {
-        self.id
-    }
-    
-    pub fn set_id(&mut self, id: usize) {
-        self.id = id;
-    }
-
     pub fn get_radius(&self) -> f32 {
         self.radius
+    }
+
+    pub fn set_radius(&mut self, radius: f32) {
+        self.radius = radius;
     }
 
     pub fn get_mass(&self) -> f32 {
@@ -85,12 +53,12 @@ impl Verlet {
     }
 
     pub fn get_position(&self) -> Vec2 {
-        self.position  // Vec2 is Copy, so this creates a copy automatically
+        self.position 
     }
 
     pub fn get_velocity(&self) -> Vec2 {
         if self.last_dt == 0.0 {
-            Vec2::ZERO  // Return zero velocity for the first frame
+            Vec2::ZERO
         } else {
             (self.position - self.last_position) / self.last_dt
         }
@@ -119,14 +87,12 @@ impl Verlet {
     pub fn update_position(&mut self, dt: f32){
         let displacement = self.position - self.last_position;
         self.last_position = self.position;
-        
 
         self.position += self.acceleration * dt * dt;
         self.position += displacement;
-        println!("{}", self.get_velocity());
 
         self.last_acceleration = self.acceleration;
         self.last_dt = dt;
-        self.acceleration = Vec2::ZERO; // Reset acceleration applied at this frame
+        self.acceleration = Vec2::ZERO;
     }
 }
