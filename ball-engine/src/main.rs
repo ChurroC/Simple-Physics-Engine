@@ -13,6 +13,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use std::fs::File;
 use std::io::Write;
 use std::io::Read;
+use std::vec;
 use serde_json::{json, Value};
 
 #[macroquad::main("Game")]
@@ -26,12 +27,13 @@ async fn main() {
 
     let mut solver = Solver::new(
         &[
-            Verlet::new_with_radius(vec2(0.0, 0.0), 20.0),
-            Verlet::new_with_radius(vec2(70.0, 0.0), 20.0),
+            // Verlet::new_with_radius(vec2(0.0, 0.0), 20.0),
+            // Verlet::new_with_radius(vec2(70.0, 0.0), 20.0),
         ],
         vec2(0.0, -500.0),
         constraint_radius,
-        8
+        8,
+        8.0 * 2.5,
     );
     if let Err(e) = solver.load_colors("colors.bin") {
         println!("Error loading colors: {}", e);
@@ -49,7 +51,7 @@ async fn main() {
     let mut last_time = get_time();
     let mut total_time: u128 = 0;
     
-    let mut print_data = false;
+    // let mut print_data = false;
 
     let fps_threshold: i32 = 60;
     let measurement_frames: i32 = 30; // Number of frames to confirm slowdown
@@ -59,7 +61,7 @@ async fn main() {
     loop {
         let current_time = get_time();
         let frame_time = current_time - last_time;
-        let fps = 1.0 / (frame_time as f32 / 1000.0);
+        let fps = get_fps();
         last_time = current_time;
         
         accumulator += frame_time;
@@ -78,39 +80,40 @@ async fn main() {
                 ball_drop_accumlator = 0;
             }
 
-            let time_check = 3 * 1000;
-            if total_time >= time_check && !print_data {
-                for i in 0..1 {
-                    let verlet = &solver.get_verlets()[i];
+            // let time_check = 3 * 1000;
+            // if total_time >= time_check && !print_data {
+            //     for i in 0..1 {
+            //         let verlet = &solver.get_verlets()[i];
                     
-                    let alpha_goal = time_check as f32 + 200.0;
-                    let alpha = (alpha_goal - total_time as f32) / (dt as f32);
+            //         let alpha_goal = time_check as f32 + 200.0;
+            //         let alpha = (alpha_goal - total_time as f32) / (dt as f32);
 
-                    let (x, y) = verlet.get_position().into();
-                    let (x_inter, y_inter) = verlet.get_interpolated_position(alpha).into();
+            //         let (x, y) = verlet.get_position().into();
+            //         let (x_inter, y_inter) = verlet.get_interpolated_position(alpha).into();
 
-                    let data = json!({
-                        "read_time": {
-                            "time": total_time as f32 / 1000.0,
-                            "x": x,
-                            "y": y,
-                        },
-                        "goal_time": {
-                            "time": alpha_goal / 1000.0,
-                            "x_inter": x_inter,
-                            "y_inter": y_inter,
-                        }
-                    });
+            //         let data = json!({
+            //             "read_time": {
+            //                 "time": total_time as f32 / 1000.0,
+            //                 "x": x,
+            //                 "y": y,
+            //             },
+            //             "goal_time": {
+            //                 "time": alpha_goal / 1000.0,
+            //                 "x_inter": x_inter,
+            //                 "y_inter": y_inter,
+            //             }
+            //         });
 
-                    write_data(format!("{i}-ball"), data);
-                }
-                print_data = true;
-            }
+            //         write_data(format!("{i}-ball"), data);
+            //     }
+            //     print_data = true;
+            // }
         }
 
         if is_mouse_button_down(MouseButton::Left) {
             if mouse_drop_accumulator >= mouse_drops_per_ms {
-                let position = vec2(mouse_position().0, mouse_position().1) - vec2(screen_width / 2.0, screen_height / 2.0);
+                let origin = vec2(screen_width / 2.0, screen_height / 2.0);
+                let position = origin + vec2(mouse_position().0, mouse_position().1) - vec2(screen_width / 2.0, screen_height / 2.0) * vec2(1.0, -1.0);
                 solver.add_position(Verlet::new(position));  // Add new position at mouse position
                 mouse_drop_accumulator = 0;
             };
@@ -158,7 +161,7 @@ async fn main() {
         for verlet in solver.get_verlets() {
             // This is since the solver imagines the ball at being shows at 0, 0
             let origin = vec2(screen_width / 2.0, screen_height / 2.0);
-            let interpolated_pos = origin + verlet.get_interpolated_position(alpha)  * Vec2::new(1.0, -1.0);
+            let interpolated_pos = origin + verlet.get_interpolated_position(alpha)  * vec2(1.0, -1.0);
             let (x, y) = interpolated_pos.into();
             draw_circle(x, y, verlet.get_radius(), Color::from_rgba(
                 verlet.get_color().x as u8,
@@ -168,12 +171,12 @@ async fn main() {
             ));
             // draw_arrow(
             //     interpolated_pos,
-            //     interpolated_pos + verlet.get_velocity() * Vec2::new(1.0, -1.0) / 5.0,
+            //     interpolated_pos + verlet.get_velocity() * vec2(1.0, -1.0) / 5.0,
             //     ORANGE
             // );
             // draw_arrow(
             //     interpolated_pos,
-            //     interpolated_pos + verlet.get_acceleration() * Vec2::new(1.0, -1.0) / 5.0,
+            //     interpolated_pos + verlet.get_acceleration() * vec2(1.0, -1.0) / 5.0,
             //     RED
             // );
         }

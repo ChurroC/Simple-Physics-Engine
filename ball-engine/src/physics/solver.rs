@@ -46,7 +46,7 @@ impl Solver {
             subdivision,
             cell_size: cell_size,
             grid_size: grid_size,
-            grid: vec![vec![]; grid_size],
+            grid: vec![vec![]; grid_size * grid_size],
         }
     }
 
@@ -55,7 +55,7 @@ impl Solver {
         for _ in 0..self.subdivision {
             self.apply_gravity();
             self.apply_wall_constraints(sub_dt);
-            let collisions: Vec<(usize, usize)> = self.find_collisions_sort_sweep();
+            let collisions: Vec<(usize, usize)> = self.find_collisions_space_partitioning();
             self.solve_collisions(collisions, sub_dt);
             self.update_positions(sub_dt);
         }
@@ -206,7 +206,7 @@ impl Solver {
         collisions
     }
 
-    fn find_collisions_space_partitioning(&mut self) {
+    fn find_collisions_space_partitioning(&mut self) -> Vec<(usize, usize)> {
         let mut collisions: Vec<(usize, usize)> = vec![];
 
         for cell in &mut self.grid {
@@ -224,6 +224,8 @@ impl Solver {
                 self.grid[cell_index].push(i);
             }
         }
+
+        // Grids are filled with indices of verlets
         for y in 0..self.grid_size {
             for x in 0..self.grid_size {
                 let cell_index = y * self.grid_size + x;
@@ -236,23 +238,33 @@ impl Solver {
                     // Check against other particles in the same cell
                     for j in (i + 1)..particles_in_cell.len() {
                         let particle_j = particles_in_cell[j];
-                        collisions.push((i, j));
+                        collisions.push((particle_i.min(particle_j), particle_i.max(particle_j)));
                     }
 
-                    let neighboring_indices: [(usize, usize); 4] = [
-                        (x - 1, y),
-                        (x + 1, y),
-                        (x, y - 1),
-                        (x, y + 1),
+                    let neighbor_offsets: [(i32, i32); 8] = [
+                        (1, 0),    // right
+                        (1, 1),    // bottom-right
+                        (0, 1),    // bottom
+                        (-1, 1),   // bottom-left
+                        (-1, 0),   // left
+                        (-1, -1),  // top-left
+                        (0, -1),   // top
+                        (1, -1),   // top-right
                     ];
 
                     // Check against particles in neighboring cells
-                    for (nx, ny) in neighboring_indices {
-                        if nx >= 0 && nx < self.grid_size && 
-                        ny >= 0 && ny < self.grid_size {
-                            let neighbor_index = (ny * self.grid_size) + nx;
+                    for (dx, dy) in &neighbor_offsets {
+                        let nx = x as i32 + dx;
+                        let ny = y as i32 + dy;
+                        
+                        // Check if neighbor is in bounds
+                        if nx >= 0 && nx < self.grid_size as i32 && 
+                           ny >= 0 && ny < self.grid_size as i32 {
+                            let neighbor_index = (ny as usize * self.grid_size) + nx as usize;
+                            
+                            // Check against all particles in the neighboring cell
                             for &particle_j in &self.grid[neighbor_index] {
-                                collisions.push((particle_i, particle_j));
+                                collisions.push((particle_i.min(particle_j), particle_i.max(particle_j)));
                             }
                         }
                     }
