@@ -17,11 +17,12 @@ pub struct Solver {
     cell_size: f32,
     grid_size: usize,
     grid: Vec<Vec<usize>>,
+    continuous_collision_detection: bool,
 }
 
 
 impl Solver {
-    pub fn new(verlets: &[Verlet], gravity: Vec2, constraint_radius: f32, subdivision: usize, cell_size: f32) -> Self {
+    pub fn new(verlets: &[Verlet], gravity: Vec2, constraint_radius: f32, subdivision: usize, cell_size: f32, continuous_collision_detection: bool) -> Self {
         let mut events = Vec::new();
         
         for (i, verlet) in verlets.iter().enumerate() {
@@ -47,17 +48,84 @@ impl Solver {
             cell_size: cell_size,
             grid_size: grid_size,
             grid: vec![vec![]; grid_size * grid_size],
+            continuous_collision_detection: continuous_collision_detection,
         }
     }
 
     pub fn update(&mut self, dt: f32) {
-        let sub_dt = dt / self.subdivision as f32;
-        for _ in 0..self.subdivision {
+        if !self.continuous_collision_detection {
+            let sub_dt = dt / self.subdivision as f32;
+            for _ in 0..self.subdivision {
+                self.apply_gravity();
+                self.apply_wall_constraints(sub_dt);
+                let collisions: Vec<(usize, usize)> = self.find_collisions_space_partitioning();
+                self.solve_collisions(collisions, sub_dt);
+                self.update_positions(sub_dt);
+            }
+        } else {
             self.apply_gravity();
-            self.apply_wall_constraints(sub_dt);
-            let collisions: Vec<(usize, usize)> = self.find_collisions_space_partitioning();
-            self.solve_collisions(collisions, sub_dt);
-            self.update_positions(sub_dt);
+        
+            let mut remaining_time = dt;
+            
+            while remaining_time > 1e-6 {  // Small epsilon to prevent infinite loops
+                // Find earliest wall collision time
+                let mut earliest_collision_time = remaining_time;
+                let mut collision_idx = None;
+                
+                // Check all objects for potential wall collisions
+                for (i, verlet) in self.verlets.iter().enumerate() {
+                    let pos = verlet.get_position();
+                    let vel = verlet.get_velocity();
+                    let radius = verlet.get_radius();
+                    
+                    // Calculate time to wall collision
+                    let dist_to_center = pos.length();
+                    
+                    // Only check if moving toward boundary
+                    if vel.dot(pos) > 0.0 && dist_to_center < self.constraint_radius - radius {
+                        // Solve quadratic equation for wall intersection
+                        let a = vel.dot(vel);
+                        let b = 2.0 * pos.dot(vel);
+                        let c = pos.dot(pos) - (self.constraint_radius - radius).powi(2);
+                        
+                        let discriminant = b * b - 4.0 * a * c;
+                        
+                        if discriminant >= 0.0 {
+                            // Find the positive root (time of collision)
+                            let t = (-b + discriminant.sqrt()) / (2.0 * a);
+                            
+                            // If collision happens within remaining time and is earlier than any found so far
+                            if t > 0.0 && t < earliest_collision_time {
+                                earliest_collision_time = t;
+                                collision_idx = Some(i);
+                            }
+                        }
+                    }
+                }
+
+                
+                self.apply_gravity();
+                self.update_positions(earliest_collision_time);
+                let collisions: Vec<(usize, usize)> = self.find_collisions_space_partitioning();
+                self.solve_collisions(collisions, earliest_collision_time);
+
+                if let Some(idx) = collision_idx {
+                    let verlet = &mut self.verlets[idx];
+                    let coefficient_of_restitution = 1.0;
+
+                    let dist_to_cen = verlet.get_position();
+                    let dist_norm = dist_to_cen.normalize();
+
+                    let vel = verlet.get_velocity();
+                    let v_norm = vel.project_onto(dist_norm);
+
+                    let correct_position = dist_norm * (self.constraint_radius - verlet.get_radius());
+                    verlet.set_position(correct_position);
+                    verlet.set_velocity( (vel - 2.0 * v_norm) * coefficient_of_restitution, earliest_collision_time); // Just push the portion normal to the wall inverse
+                }
+                
+                remaining_time -= earliest_collision_time;
+            }
         }
     }
 
@@ -78,19 +146,18 @@ impl Solver {
     // We just lose the normal velocity and keep the tangential velocity
     fn apply_wall_constraints_smooth(&mut self, dt: f32) {
         let coefficient_of_restitution = 1.0;
-        let constraint_center= vec2(0.0, 0.0);
 
         for verlet in &mut self.verlets {
-            let dist_to_cen = verlet.get_position() - constraint_center; // Or distance to verlet from center
+            let dist_to_cen = verlet.get_position(); // Or distance to verlet from center
             let dist = dist_to_cen.length();
             
             if dist > self.constraint_radius - verlet.get_radius() {
-                let dist_mag: Vec2 = dist_to_cen.normalize();
+                let dist_norm: Vec2 = dist_to_cen.normalize();
 
                 let vel = verlet.get_velocity();
-                let v_norm = vel.project_onto(dist_mag);
+                let v_norm = vel.project_onto(dist_norm);
 
-                let correct_position = constraint_center + dist_mag * (self.constraint_radius - verlet.get_radius());
+                let correct_position = dist_norm * (self.constraint_radius - verlet.get_radius());
                 verlet.set_position(correct_position);
                 verlet.set_velocity( (vel - v_norm) * coefficient_of_restitution, dt); // Just push the portion normal to the wall inverse
             }
@@ -100,19 +167,18 @@ impl Solver {
     // More accurate bounce
     fn apply_wall_constraints(&mut self, dt: f32) {
         let coefficient_of_restitution = 1.0;
-        let constraint_center= vec2(0.0, 0.0);
 
         for verlet in &mut self.verlets {
-            let dist_to_cen = verlet.get_position() - constraint_center; // Or distance to verlet from center
+            let dist_to_cen = verlet.get_position();
             let dist = dist_to_cen.length();
             
             if dist > self.constraint_radius - verlet.get_radius() {
-                let dist_mag = dist_to_cen.normalize();
+                let dist_norm = dist_to_cen.normalize();
 
                 let vel = verlet.get_velocity();
-                let v_norm = vel.project_onto(dist_mag);
+                let v_norm = vel.project_onto(dist_norm);
 
-                let correct_position = constraint_center + dist_mag * (self.constraint_radius - verlet.get_radius());
+                let correct_position = dist_norm * (self.constraint_radius - verlet.get_radius());
                 verlet.set_position(correct_position);
                 verlet.set_velocity( (vel - 2.0 * v_norm) * coefficient_of_restitution, dt); // Just push the portion normal to the wall inverse
             }
@@ -226,6 +292,14 @@ impl Solver {
             }
         }
 
+        
+        let neighbor_offsets: [(i32, i32); 4] = [
+            (1, 0),    // right
+            (1, 1),    // bottom-right
+            (0, 1),    // bottom
+            (-1, 1),   // bottom-left
+        ];
+
         // Grids are filled with indices of verlets
         for y in 0..self.grid_size {
             for x in 0..self.grid_size {
@@ -242,15 +316,9 @@ impl Solver {
                         collisions.push((particle_i.min(particle_j), particle_i.max(particle_j)));
                     }
 
-                    let neighbor_offsets: [(i32, i32); 4] = [
-                        (1, 0),    // right
-                        (1, 1),    // bottom-right
-                        (0, 1),    // bottom
-                        (-1, 1),   // bottom-left
-                    ];
 
                     // Check against particles in neighboring cells
-                    for (dx, dy) in &neighbor_offsets {
+                    for &(dx, dy) in &neighbor_offsets {
                         let nx = x as i32 + dx;
                         let ny = y as i32 + dy;
                         

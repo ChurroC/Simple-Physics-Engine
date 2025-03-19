@@ -13,7 +13,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use std::fs::File;
 use std::io::Write;
 use std::io::Read;
-use std::vec;
 use serde_json::{json, Value};
 
 #[macroquad::main("Game")]
@@ -25,17 +24,18 @@ async fn main() {
     // Calculate constraint radius
     let constraint_radius = screen_height.min(screen_width) / 2.0 - 50.0;
 
-    let ball_size = 6.0;
+    let ball_size = 4.0;
 
     let mut solver = Solver::new(
         &[
             // Verlet::new_with_radius(vec2(0.0, 0.0), 20.0),
             // Verlet::new_with_radius(vec2(70.0, 0.0), 20.0),
         ],
-        vec2(0.0, -500.0),
+        vec2(0.0, 0.0),
         constraint_radius,
-        8,
+        1,
         ball_size * 2.5,
+        true
     );
     if let Err(e) = solver.load_colors("colors.bin") {
         println!("Error loading colors: {}", e);
@@ -47,7 +47,7 @@ async fn main() {
     let mouse_drops_per_ms = 100;
     let mut mouse_drop_accumulator = 0;
 
-    let ball_drop_per_ms = 10;
+    let ball_drop_per_frame = 100;
     let mut ball_drop_accumlator = 0;
 
     let mut last_time = get_time();
@@ -59,6 +59,11 @@ async fn main() {
     let measurement_frames: i32 = 30; // Number of frames to confirm slowdown
     let mut slow_frames_accumulator: i32 = 0;
     let mut balls_til_60_fps: usize = 0;
+
+    
+    let mut ball = Verlet::new_with_radius(vec2(0.0, screen_height * 2.0 / 7.0), ball_size * 2.0);
+    ball.set_velocity(vec2(0.0, -2000.0), dt as f32 / 1000.0);
+    solver.add_position(ball);
     
     loop {
         let current_time = get_time();
@@ -73,11 +78,11 @@ async fn main() {
             solver.update(dt as f32 / 1000.0);
             accumulator -= dt;
             total_time += dt;
-            ball_drop_accumlator += 1;
+            ball_drop_accumlator += 0;
 
-            if ball_drop_accumlator >= ball_drop_per_ms && !solver.is_container_full() {
+            if ball_drop_accumlator >= ball_drop_per_frame && !solver.is_container_full() {
                 let mut ball = Verlet::new_with_radius(vec2(0.15 * screen_width, screen_height * 2.0 / 7.0), ball_size);
-                ball.set_velocity(vec2(0.0, -10.0), dt as f32 / 1000.0);
+                ball.set_velocity(vec2(0.0, -1000.0), dt as f32 / 1000.0);
                 solver.add_position(ball);
                 ball_drop_accumlator = 0;
             }
