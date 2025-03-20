@@ -2,6 +2,7 @@ use super::verlet::Verlet;
 use glam::{Vec2, Vec4};
 use serde::{Serialize, Deserialize};
 use bincode;
+use core::num;
 use std::{sync::Arc, thread};
 use rayon::prelude::*;
 
@@ -18,7 +19,6 @@ pub struct Solver {
     cell_size: f32,
     grid_size: usize,
     grid: Vec<Vec<usize>>,
-    regions: Vec<(usize, usize, usize, usize)>,
 }
 
 
@@ -38,27 +38,6 @@ impl Solver {
 
         let grid_size = (constraint_radius * 2.0 / cell_size) as usize; 
 
-        let threads = 5;
-        let divisions = (threads as f64).sqrt().ceil() as usize;
-        let region_size = (grid_size + divisions - 1) / divisions; // Ceiling division
-        
-        // Create a collection of regions (x_start, y_start, x_end, y_end)
-        let mut regions = Vec::new();
-        for y in 0..divisions {
-            let y_start = y * region_size;
-            let y_end = (y_start + region_size).min(grid_size);
-            
-            for x in 0..divisions {
-                let x_start = x * region_size;
-                let x_end = (x_start + region_size).min(grid_size);
-                
-                // Only add non-empty regions
-                if y_start < y_end && x_start < x_end {
-                    regions.push((x_start, y_start, x_end, y_end));
-                }
-            }
-        }
-
         Solver {
             verlets: verlets.iter().cloned().collect(),
             gravity,
@@ -70,7 +49,6 @@ impl Solver {
             cell_size: cell_size,
             grid_size: grid_size,
             grid: vec![vec![]; grid_size * grid_size],
-            regions
         }
     }
 
@@ -79,8 +57,9 @@ impl Solver {
         for _ in 0..self.subdivision {
             self.apply_gravity();
             self.apply_wall_constraints(sub_dt);
-            let collisions: Vec<(usize, usize)> = self.find_collisions_space_partitioning();
-            self.solve_collisions(collisions, sub_dt);
+            // let collisions: Vec<(usize, usize)> = self.find_collisions_space_partitioning_parallel();
+            // self.solve_collisions(collisions, sub_dt);
+            self.find_collisions_space_partitioning_parallel();
             self.update_positions(sub_dt);
         }
     }
@@ -296,24 +275,24 @@ impl Solver {
         collisions
     }
 
-    fn find_collisions_space_partitioning_standard_threads(&mut self) -> Vec<(usize, usize)> {
+    fn find_collisions_space_partitioning_parallel(&mut self) {
         // Clear the grid cells
         for cell in &mut self.grid {
             cell.clear();
         }
-    
-        // Populate the grid with verlet indices
-        for (i, verlet) in self.verlets.iter().enumerate() {
-            let pos = verlet.get_position();
-            
-            let cell_x = ((pos.x + self.constraint_radius) / self.cell_size).floor() as usize;
-            let cell_y = ((pos.y + self.constraint_radius) / self.cell_size).floor() as usize;
-            
-            let cell_index = (cell_y * self.grid_size) + cell_x;
-            if cell_index < self.grid.len() {
-                self.grid[cell_index].push(i);
-            }
-        }
+
+        let grid = self.verlets.iter().enumerate()
+            .filter(|(i, verlet)| {
+                let pos = verlet.get_position();
+                
+                let cell_x = ((pos.x + self.constraint_radius) / self.cell_size).floor() as usize;
+                let cell_y = ((pos.y + self.constraint_radius) / self.cell_size).floor() as usize;
+                
+                let cell_index = (cell_y * self.grid_size) + cell_x;
+                if cell_index < self.grid.len() {
+                    return self.grid[cell_index].push(i);
+                }
+            }).collect();
     
         // Define neighbor offsets for collision checks
         let neighbor_offsets: [(i32, i32); 4] = [
@@ -324,99 +303,127 @@ impl Solver {
         ];
     
         // Determine number of threads to use (maybe use num_cpus crate in real code)
-        let num_threads = 6; // Adjust based on your system's core count
         
         // Create a thread-safe reference to the grid
         let grid_ref = Arc::new(self.grid.clone());
         let grid_size = self.grid_size;
         
         // Prepare for results
-        let (tx, rx) = std::sync::mpsc::channel();
-        let mut handles = Vec::with_capacity(num_threads);
+        // let mut handles: Vec<usize> = Vec::with_capacity(num_threads);
+
+        let x_regions = 2;
+        let y_regions = 2;
+
         
-        // Spawn threads
-        for thread_id in 0..num_threads {
-            // Calculate this thread's region
-            let start_y = thread_id * grid_size / num_threads;
-            let end_y = (thread_id + 1) * grid_size / num_threads;
+        // let mut results = Vec::new();
+
+        
+        let mut a = vec![1, 2, 3];
+        let mut x: i32 = 0;
+
             
-            // Clone shared data
-            let thread_tx = tx.clone();
-            let thread_grid = Arc::clone(&grid_ref);
-            let thread_offsets = neighbor_offsets.clone();
-            
-            // Spawn the thread
-            let handle = std::thread::spawn(move || {
-                let mut local_collisions = Vec::new();
-                
-                // Process assigned region
-                for y in start_y..end_y {
-                    for x in 0..grid_size {
-                        let cell_index = y * grid_size + x;
-                        
-                        // Skip empty cells for efficiency
-                        if thread_grid[cell_index].is_empty() {
-                            continue;
-                        }
-                        
-                        // Check collisions within this cell
-                        let particles_in_cell = &thread_grid[cell_index];
-                        for i in 0..particles_in_cell.len() {
-                            let particle_i = particles_in_cell[i];
-                            
-                            // Check against other particles in the same cell
-                            for j in (i + 1)..particles_in_cell.len() {
-                                let particle_j = particles_in_cell[j];
-                                local_collisions.push((particle_i.min(particle_j), particle_i.max(particle_j)));
-                            }
-            
-                            // Check against particles in neighboring cells
-                            for &(dx, dy) in &thread_offsets {
-                                let nx = x as i32 + dx;
-                                let ny = y as i32 + dy;
-                                
-                                // Check if neighbor is in bounds
-                                if nx >= 0 && nx < grid_size as i32 && 
-                                   ny >= 0 && ny < grid_size as i32 {
-                                    let neighbor_index = (ny as usize * grid_size) + nx as usize;
-                                    
-                                    // Skip empty neighbor cells
-                                    if thread_grid[neighbor_index].is_empty() {
-                                        continue;
-                                    }
-                                    
-                                    // Check against all particles in the neighboring cell
-                                    for &particle_j in &thread_grid[neighbor_index] {
-                                        local_collisions.push((particle_i.min(particle_j), particle_i.max(particle_j)));
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                // Send local results back
-                thread_tx.send(local_collisions).expect("Failed to send collisions back to main thread");
+        thread::scope(|s| {
+            s.spawn(|| {
+                println!("hello from the first scoped thread");
+                // We can borrow `a` here.
+                println!("test: {}", grid_ref.len());
             });
+            s.spawn(|| {
+                println!("hello from the second scoped thread");
+                // We can even mutably borrow `x` here,
+                // because no other threads are using it.
+                x += a[0] + a[2];
+                println!("test2: {}", grid_ref.len());
+            });
+            println!("hello from the main thread");
+        });
+        
+        // results = results.into_iter().flatten().collect::<Vec<i32>>();
+
+        // println!("Scoped threads result length: {}", results.len());
+        // // Spawn threads
+        // for thread_id in 0..num_threads {
+        //     // Calculate this thread's region
+        //     let start_y = (thread_id) / num_threads * grid_size;
+        //     let end_y = ((thread_id / 2) + 1) / num_threads * grid_size;
             
-            handles.push(handle);
-        }
+        //     // Clone shared data
+        //     let thread_tx = tx.clone();
+        //     let thread_grid = Arc::clone(&grid_ref);
+        //     let thread_offsets = neighbor_offsets.clone();
+            
+        //     // Spawn the thread
+        //     let handle = std::thread::spawn(move || {
+        //         let mut local_collisions = Vec::new();
+                
+        //         // Process assigned region
+        //         for y in start_y..end_y {
+        //             for x in 0..grid_size {
+        //                 let cell_index = y * grid_size + x;
+                        
+        //                 // Skip empty cells for efficiency
+        //                 if thread_grid[cell_index].is_empty() {
+        //                     continue;
+        //                 }
+                        
+        //                 // Check collisions within this cell
+        //                 let particles_in_cell = &thread_grid[cell_index];
+        //                 for i in 0..particles_in_cell.len() {
+        //                     let particle_i = particles_in_cell[i];
+                            
+        //                     // Check against other particles in the same cell
+        //                     for j in (i + 1)..particles_in_cell.len() {
+        //                         let particle_j = particles_in_cell[j];
+        //                         local_collisions.push((particle_i.min(particle_j), particle_i.max(particle_j)));
+        //                     }
+            
+        //                     // Check against particles in neighboring cells
+        //                     for &(dx, dy) in &thread_offsets {
+        //                         let nx = x as i32 + dx;
+        //                         let ny = y as i32 + dy;
+                                
+        //                         // Check if neighbor is in bounds
+        //                         if nx >= 0 && nx < grid_size as i32 && 
+        //                            ny >= 0 && ny < grid_size as i32 {
+        //                             let neighbor_index = (ny as usize * grid_size) + nx as usize;
+                                    
+        //                             // Skip empty neighbor cells
+        //                             if thread_grid[neighbor_index].is_empty() {
+        //                                 continue;
+        //                             }
+                                    
+        //                             // Check against all particles in the neighboring cell
+        //                             for &particle_j in &thread_grid[neighbor_index] {
+        //                                 local_collisions.push((particle_i.min(particle_j), particle_i.max(particle_j)));
+        //                             }
+        //                         }
+        //                     }
+        //                 }
+        //             }
+        //         }
+                
+        //         // Send local results back
+        //         thread_tx.send(local_collisions).expect("Failed to send collisions back to main thread");
+        //     });
+            
+        //     handles.push(handle);
+        // }
         
-        // Drop the original sender to avoid deadlock
-        drop(tx);
+        // // Drop the original sender to avoid deadlock
+        // drop(tx);
         
-        // Collect results from all threads
-        let mut all_collisions = Vec::new();
-        while let Ok(local_collisions) = rx.recv() {
-            all_collisions.extend(local_collisions);
-        }
+        // // Collect results from all threads
+        // let mut all_collisions = Vec::new();
+        // while let Ok(local_collisions) = rx.recv() {
+        //     all_collisions.extend(local_collisions);
+        // }
         
-        // Wait for all threads to finish
-        for handle in handles {
-            handle.join().expect("Thread panicked");
-        }
+        // // Wait for all threads to finish
+        // for handle in handles {
+        //     handle.join().expect("Thread panicked");
+        // }
         
-        all_collisions
+        // all_collisions
     }
 
     fn solve_collisions(&mut self, collisions: Vec<(usize, usize)>, dt: f32) {
