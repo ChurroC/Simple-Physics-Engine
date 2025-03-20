@@ -3,6 +3,7 @@ use glam::{Vec2, Vec4};
 use serde::{Serialize, Deserialize};
 use bincode;
 use std::thread;
+use rayon::prelude::*;
 
 
 #[derive(Serialize, Deserialize)]
@@ -17,6 +18,7 @@ pub struct Solver {
     cell_size: f32,
     grid_size: usize,
     grid: Vec<Vec<usize>>,
+    regions: Vec<(usize, usize, usize, usize)>,
 }
 
 
@@ -36,6 +38,27 @@ impl Solver {
 
         let grid_size = (constraint_radius * 2.0 / cell_size) as usize; 
 
+        let threads = 5;
+        let divisions = (threads as f64).sqrt().ceil() as usize;
+        let region_size = (grid_size + divisions - 1) / divisions; // Ceiling division
+        
+        // Create a collection of regions (x_start, y_start, x_end, y_end)
+        let mut regions = Vec::new();
+        for y in 0..divisions {
+            let y_start = y * region_size;
+            let y_end = (y_start + region_size).min(grid_size);
+            
+            for x in 0..divisions {
+                let x_start = x * region_size;
+                let x_end = (x_start + region_size).min(grid_size);
+                
+                // Only add non-empty regions
+                if y_start < y_end && x_start < x_end {
+                    regions.push((x_start, y_start, x_end, y_end));
+                }
+            }
+        }
+
         Solver {
             verlets: verlets.iter().cloned().collect(),
             gravity,
@@ -47,6 +70,7 @@ impl Solver {
             cell_size: cell_size,
             grid_size: grid_size,
             grid: vec![vec![]; grid_size * grid_size],
+            regions
         }
     }
 
@@ -289,20 +313,6 @@ impl Solver {
             }
         }
 
-        let mut handles = vec![];
-        
-        // Split grid into 2×2 regions
-        let half_rows = self.grid_size / 2;
-        let half_cols = self.grid_size / 2;
-        
-        // Create 4 regions: (0,0), (0,1), (1,0), (1,1)
-        let regions = [
-            (0, 0, half_cols, half_rows),
-            (half_cols, 0, self.grid_size, half_rows),
-            (0, half_rows, half_cols, self.grid_size),
-            (half_cols, half_rows, self.grid_size, self.grid_size),
-        ];
-
         let neighbor_offsets: [(i32, i32); 4] = [
             (1, 0),    // right
             (1, 1),    // bottom-right
@@ -310,67 +320,69 @@ impl Solver {
             (-1, 1),   // bottom-left
         ];
 
-        
-        let grid_size = self.grid_size;
+            // Determine number of divisions in each dimension
 
-        for (start_col, start_row, end_col, end_row) in regions {
-            let grid_clone = self.grid.clone();
-
-            let handle = thread::spawn(move || {
-                let mut local_collisions = Vec::new();
-
-                for y in start_row..end_row {
-                    for x in start_col..end_col {
-                        let cell_index = y * grid_size + x;
+    
+    // Keep a reference to the grid - no cloning!
+    let grid_ref = &self.grid;
+    let grid_size = self.grid_size;
+    
+    // Process regions in parallel
+    let collisions: Vec<(usize, usize)> = self.regions.par_iter()
+    .flat_map(|&(x_start, y_start, x_end, y_end)| {
+            let mut local_collisions = Vec::new();
+            
+            // Process all cells in this region
+            for y in y_start..y_end {
+                for x in x_start..x_end {
+                    let cell_index = y * grid_size + x;
+                    
+                    // Skip empty cells for efficiency
+                    if grid_ref[cell_index].is_empty() {
+                        continue;
+                    }
+                    
+                    // Check collisions within this cell
+                    let particles_in_cell = &grid_ref[cell_index];
+                    for i in 0..particles_in_cell.len() {
+                        let particle_i = particles_in_cell[i];
                         
-                        // Check collisions within this cell
-                        let particles_in_cell = &grid_clone[cell_index];
-                        for i in 0..particles_in_cell.len() {
-                            let particle_i = particles_in_cell[i];
+                        // Check against other particles in the same cell
+                        for j in (i + 1)..particles_in_cell.len() {
+                            let particle_j = particles_in_cell[j];
+                            local_collisions.push((particle_i.min(particle_j), particle_i.max(particle_j)));
+                        }
+        
+                        // Check against particles in neighboring cells
+                        for &(dx, dy) in &neighbor_offsets {
+                            let nx = x as i32 + dx;
+                            let ny = y as i32 + dy;
                             
-                            // Check against other particles in the same cell
-                            for j in (i + 1)..particles_in_cell.len() {
-                                let particle_j = particles_in_cell[j];
-                                local_collisions.push((particle_i.min(particle_j), particle_i.max(particle_j)));
-                            }
-        
-        
-                            // Check against particles in neighboring cells
-                            for &(dx, dy) in &neighbor_offsets {
-                                let nx = x as i32 + dx;
-                                let ny = y as i32 + dy;
+                            // Check if neighbor is in bounds
+                            if nx >= 0 && nx < grid_size as i32 && 
+                               ny >= 0 && ny < grid_size as i32 {
+                                let neighbor_index = (ny as usize * grid_size) + nx as usize;
                                 
-                                // Check if neighbor is in bounds
-                                if nx >= 0 && nx < grid_size as i32 && 
-                                   ny >= 0 && ny < grid_size as i32 {
-                                    let neighbor_index = (ny as usize * grid_size) + nx as usize;
-                                    
-                                    // Check against all particles in the neighboring cell
-                                    for &particle_j in &grid_clone[neighbor_index] {
-                                        local_collisions.push((particle_i.min(particle_j), particle_i.max(particle_j)));
-                                    }
+                                // Skip empty neighbor cells
+                                if grid_ref[neighbor_index].is_empty() {
+                                    continue;
+                                }
+                                
+                                // Check against all particles in the neighboring cell
+                                for &particle_j in &grid_ref[neighbor_index] {
+                                    local_collisions.push((particle_i.min(particle_j), particle_i.max(particle_j)));
                                 }
                             }
                         }
                     }
                 }
-
-                local_collisions
-            });
-
-            handles.push(handle);
-        }
-
-
-        let mut all_collisions = Vec::new();
-        for handle in handles {
-            match handle.join() {
-                Ok(thread_collisions) => all_collisions.extend(thread_collisions),
-                Err(_) => eprintln!("A thread panicked!"),
             }
-        }
-        
-        all_collisions
+            
+            local_collisions
+        })
+        .collect();
+
+    collisions
     }
 
     fn solve_collisions(&mut self, collisions: Vec<(usize, usize)>, dt: f32) {

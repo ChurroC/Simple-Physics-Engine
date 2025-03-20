@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 use macroquad::prelude::{clear_background, draw_circle, draw_circle_lines, draw_line, draw_text, get_fps, is_key_pressed, is_mouse_button_down, mouse_position, next_frame, screen_height, screen_width, Color, KeyCode, MouseButton, BLACK, WHITE, ORANGE, RED};
 use glam::{vec2, Vec2};
+use rand::Rng;
 
 mod physics {
     pub mod solver;
@@ -17,6 +18,7 @@ use serde_json::{json, Value};
 
 #[macroquad::main("Game")]
 async fn main() {
+    println!("Hello, world!");
     // Initialize screen dimensions
     let screen_width = screen_width();
     let screen_height = screen_height();
@@ -24,7 +26,7 @@ async fn main() {
     // Calculate constraint radius
     let constraint_radius = screen_height.min(screen_width) / 2.0 - 50.0;
 
-    let ball_size = 2.0;
+    let ball_size = 1.5;
 
     let mut solver = Solver::new(
         &[
@@ -34,7 +36,7 @@ async fn main() {
         vec2(0.0, 0.0),
         constraint_radius,
         8,
-        ball_size * 2.5
+        ball_size * 3.0,
     );
     if let Err(e) = solver.load_colors("colors.bin") {
         println!("Error loading colors: {}", e);
@@ -46,7 +48,7 @@ async fn main() {
     let mouse_drops_per_ms = 100;
     let mut mouse_drop_accumulator = 0;
 
-    let ball_drop_per_frame = 10;
+    let ball_drop_per_frame = 3;
     let mut ball_drop_accumlator = 0;
 
     let mut last_time = get_time();
@@ -63,6 +65,8 @@ async fn main() {
     // let mut ball = Verlet::new_with_radius(vec2(0.0, screen_height * 2.0 / 7.0), ball_size * 2.0);
     // ball.set_velocity(vec2(0.0, -2000.0), dt as f32 / 1000.0);
     // solver.add_position(ball);
+
+    let mut rng = rand::thread_rng();
     
     loop {
         let current_time = get_time();
@@ -81,8 +85,10 @@ async fn main() {
             ball_drop_accumlator += 1;
 
             if ball_drop_accumlator >= ball_drop_per_frame && !solver.is_container_full() {
-                let mut ball = Verlet::new_with_radius(vec2(0.15 * screen_width, screen_height * 2.0 / 7.0), ball_size);
-                ball.set_velocity(vec2(0.0, -100.0), dt as f32 / 1000.0);
+                let angle = rng.gen_range(0.0..2.0) * std::f32::consts::PI;
+                let angle_vec = vec2(angle.cos(), angle.sin());
+                let mut ball = Verlet::new_with_radius(constraint_radius / 2.0 * angle_vec, ball_size);
+                ball.set_velocity(-100.0 * angle_vec, dt as f32 / 1000.0);
                 solver.add_position(ball);
                 ball_drop_accumlator = 0;
             }
