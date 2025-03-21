@@ -20,8 +20,6 @@ pub struct Solver {
     cell_size: f32,
     grid_size: usize,
     grid: Vec<Vec<usize>>,
-    #[serde(skip)]
-    thread_pool: threadpool::ThreadPool,
 }
 
 
@@ -52,7 +50,6 @@ impl Solver {
             cell_size: cell_size,
             grid_size: grid_size,
             grid: vec![vec![]; grid_size * grid_size],
-            thread_pool: threadpool::ThreadPool::new(6),
         }
     }
 
@@ -277,11 +274,8 @@ impl Solver {
         
         collisions
     }
-    
-    // Your collision detection function, now using the persistent thread pool
+
     fn find_collisions_space_partitioning_parallel(&mut self) -> Vec<(usize, usize)> {
-        use std::sync::mpsc;
-        
         let mut new_grid = vec![Vec::new(); self.grid.len()];
     
         // Populate using iterators
@@ -298,7 +292,7 @@ impl Solver {
                 }
             });
         
-        // Wrap grid in Arc for thread-safe sharing
+        // Wrap grid in Arc for thread-safe sharing without cloning the actual data
         let grid = Arc::new(new_grid);
         let grid_size = self.grid_size;
     
@@ -312,14 +306,8 @@ impl Solver {
     
         let x_regions = 2;
         let y_regions = 3;
-        let n_jobs = x_regions * y_regions;
-        
-        // Use a channel to collect results from workers
-        let (tx, rx) = mpsc::channel();
-
-        // Job counter to keep track of submitted jobs
-        let mut job_count = 0;
-
+        let mut handles = vec![];
+    
         for y_region in 0..y_regions {
             let start_y = (y_region * grid_size) / y_regions;
             let end_y = ((y_region + 1) * grid_size) / y_regions;
@@ -328,15 +316,12 @@ impl Solver {
                 // Clone the Arc (cheap), not the grid itself
                 let grid_ref = Arc::clone(&grid);
                 
-                // Clone the sender for this job
-                let tx = tx.clone();
-                
                 // Calculate this thread's region
                 let start_x = (x_region * grid_size) / x_regions;
                 let end_x = ((x_region + 1) * grid_size) / x_regions;
     
-                // Queue the job to the thread pool
-                self.thread_pool.execute(move || {
+                // Process assigned region
+                let handle = thread::spawn(move || {
                     let mut collisions = vec![];
                     
                     for y in start_y..end_y {
@@ -346,7 +331,7 @@ impl Solver {
                             // Check collisions within this cell
                             let particles_in_cell = &grid_ref[cell_index];
                             let particles_in_cell_count = particles_in_cell.len();
-    
+
                             if particles_in_cell_count > 0 {
                                 for i in 0..particles_in_cell_count {
                                     let particle_i = particles_in_cell[i];
@@ -376,25 +361,23 @@ impl Solver {
                                     }
                                 }
                             }
+                            
                         }
                     }
                     
-                    // Send the results back through the channel
-                    tx.send(collisions).expect("Channel send failed");
+                    collisions
                 });
                 
-                job_count += 1;
+                handles.push(handle);
             }
         }
         
-        // Drop our sender so the receiver knows when all jobs are done
-        drop(tx);
-        
         // Collect results from all threads
         let mut all_collisions = Vec::new();
-        for _ in 0..job_count {
-            if let Ok(thread_collisions) = rx.recv() {
-                all_collisions.extend(thread_collisions);
+        for handle in handles {
+            match handle.join() {
+                Ok(thread_collisions) => all_collisions.extend(thread_collisions),
+                Err(_) => eprintln!("A thread panicked!"),
             }
         }
         
