@@ -10,6 +10,9 @@ https://developer.nvidia.com/gpugems/gpugems3/part-v-physics-simulation/chapter-
 https://lisyarus.github.io/blog/posts/perfect-collisions.html#section-you-spin
 https://gameprogrammingpatterns.com/spatial-partition.html
 
+IDEAS:
+use threads to run the colliison detection after the update. so it checks while the frames are being generated. so by the next tien the dt finished we will already have collisons detected.
+
 TODO:
 parallize the space partioning
 chains
