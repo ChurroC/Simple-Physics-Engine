@@ -27,7 +27,7 @@ async fn main() {
     // Calculate constraint radius
     let constraint_radius = screen_height.min(screen_width) / 2.0 - 50.0;
 
-    let ball_size = 1.5;
+    let ball_size = 2.0;
 
     let mut solver = Solver::new(
         &[
@@ -37,7 +37,7 @@ async fn main() {
         vec2(0.0, 0.0),
         constraint_radius,
         8,
-        ball_size * 2.0,
+        ball_size * 2.5,
         (4, 4)
     );
     if let Err(e) = solver.load_colors("colors.bin") {
@@ -50,7 +50,7 @@ async fn main() {
     let mouse_drops_per_ms = 100;
     let mut mouse_drop_accumulator = 0;
 
-    let ball_drop_per_frame = 10;
+    let ball_drop_per_frame = 1;
     let mut ball_drop_accumlator = 0;
 
     let mut last_time = get_time();

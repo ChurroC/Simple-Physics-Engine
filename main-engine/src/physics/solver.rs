@@ -61,7 +61,7 @@ impl Solver {
         for _ in 0..self.subdivision {
             self.apply_gravity();
             self.apply_wall_constraints(sub_dt);
-            let collisions: Vec<(usize, usize)> = self.find_collisions_space_partitioning_parallel();
+            let collisions: Vec<(usize, usize)> = self.find_collisions_space_partitioning();
             self.solve_collisions(collisions, sub_dt);
             self.update_positions(sub_dt);
         }
