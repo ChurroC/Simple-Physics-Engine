@@ -8,6 +8,7 @@ mod physics {
     pub mod verlet; 
 }
 use physics::{solver::Solver, verlet::Verlet};
+mod lib;
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -36,7 +37,8 @@ async fn main() {
         vec2(0.0, 0.0),
         constraint_radius,
         8,
-        ball_size * 3.0,
+        ball_size * 2.0,
+        (4, 4)
     );
     if let Err(e) = solver.load_colors("colors.bin") {
         println!("Error loading colors: {}", e);
@@ -48,7 +50,7 @@ async fn main() {
     let mouse_drops_per_ms = 100;
     let mut mouse_drop_accumulator = 0;
 
-    let ball_drop_per_frame = 3;
+    let ball_drop_per_frame = 10;
     let mut ball_drop_accumlator = 0;
 
     let mut last_time = get_time();

@@ -1,12 +1,10 @@
 use super::verlet::Verlet;
 use glam::{Vec2, Vec4};
+use physics_engine::ThreadPool;
 use serde::{Serialize, Deserialize};
 use bincode;
 use std::{sync::Arc, thread};
 use rayon::prelude::*;
-
-use threadpool::ThreadPool;
-use std::sync::mpsc;
 
 #[derive(Serialize, Deserialize)]
 pub struct Solver {
@@ -20,11 +18,14 @@ pub struct Solver {
     cell_size: f32,
     grid_size: usize,
     grid: Vec<Vec<usize>>,
+    #[serde(skip)]
+    pool: ThreadPool,
+    region_split: (usize, usize)
 }
 
 
 impl Solver {
-    pub fn new(verlets: &[Verlet], gravity: Vec2, constraint_radius: f32, subdivision: usize, cell_size: f32) -> Self {
+    pub fn new(verlets: &[Verlet], gravity: Vec2, constraint_radius: f32, subdivision: usize, cell_size: f32, region_split: (usize, usize)) -> Self {
         let mut events = Vec::new();
         
         for (i, verlet) in verlets.iter().enumerate() {
@@ -37,7 +38,7 @@ impl Solver {
         //  TimSort - O(n * log(n)) - Gonna use time sort initially since we don't know how in order these balls are
         events.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
 
-        let grid_size = (constraint_radius * 2.0 / cell_size) as usize; 
+        let grid_size = (constraint_radius * 2.0 / cell_size) as usize;
 
         Solver {
             verlets: verlets.iter().cloned().collect(),
@@ -50,6 +51,8 @@ impl Solver {
             cell_size: cell_size,
             grid_size: grid_size,
             grid: vec![vec![]; grid_size * grid_size],
+            pool: ThreadPool::new(region_split.0 * region_split.1 + 2),
+            region_split
         }
     }
 
@@ -226,7 +229,6 @@ impl Solver {
                 self.grid[cell_index].push(i);
             }
         }
-
         
         let neighbor_offsets: [(i32, i32); 4] = [
             (1, 0),    // right
@@ -303,10 +305,11 @@ impl Solver {
             (0, 1),    // bottom
             (-1, 1),   // bottom-left
         ];
-    
-        let x_regions = 2;
-        let y_regions = 3;
+
         let mut handles = vec![];
+
+        let x_regions = self.region_split.0;
+        let y_regions= self.region_split.1;
     
         for y_region in 0..y_regions {
             let start_y = (y_region * grid_size) / y_regions;
@@ -321,7 +324,7 @@ impl Solver {
                 let end_x = ((x_region + 1) * grid_size) / x_regions;
     
                 // Process assigned region
-                let handle = thread::spawn(move || {
+                let handle = self.pool.execute(move || {
                     let mut collisions = vec![];
                     
                     for y in start_y..end_y {
@@ -375,10 +378,8 @@ impl Solver {
         // Collect results from all threads
         let mut all_collisions = Vec::new();
         for handle in handles {
-            match handle.join() {
-                Ok(thread_collisions) => all_collisions.extend(thread_collisions),
-                Err(_) => eprintln!("A thread panicked!"),
-            }
+            let result = handle.recv().unwrap();
+            all_collisions.extend(result);
         }
         
         all_collisions
