@@ -79,11 +79,10 @@ impl Solver {
     fn find_collisions_space_partitioning(&mut self) -> Vec<(usize, usize)> {
         let mut collisions: Vec<(usize, usize)> = vec![];
 
-        // for cell in &mut self.grid {
-        //     cell.clear();
-        // }
+        for cell in &mut self.grid {
+            cell.clear();
+        }
 
-        let mut wow: Vec<(usize, usize, usize)> = vec![]; // Index in verlets, index in grid, index in cell
         for (i, verlet) in self.verlets.iter().enumerate() {
             let pos = verlet.get_position();
             
@@ -91,30 +90,11 @@ impl Solver {
             let cell_y = ((pos.y + self.constraint_radius) / self.cell_size).floor() as usize;
             
             let cell_index = (cell_y * self.grid_size) + cell_x;
-            let last_cell_index = verlet.get_last_grid();
-            let last_index = verlet.get_position_in_cell();
-            println!("Cell index: {}, Last cell index: {}, Last index: {}", cell_index, last_cell_index, last_index);
-
-            if cell_index < self.grid.len() && last_cell_index != cell_index {
-                if last_cell_index < self.grid.len() { // Cause I set the default to be max usize
-                    println!("{:?}", self.grid[last_cell_index]);
-                    self.grid[last_cell_index].swap_remove(last_index); // Taking it out the verlet from the last cell - But we also move in the last verlet in the grid to the last_cell
-                    println!("Swapping out {} from cell {}", i, last_cell_index);
-                    println!("{:?}", self.grid[last_cell_index]);
-                    if last_index < self.grid[last_cell_index].len() && self.grid[last_cell_index].len() != 1 {
-                        wow.push((self.grid[last_cell_index][last_index], last_cell_index, last_index));
-                    }
-                }
+            if cell_index < self.grid.len() {
                 self.grid[cell_index].push(i);
-                println!("Pushed {cell_index} {:?}", self.grid[cell_index]);
-                wow.push((i, cell_index, self.grid[cell_index].len() - 1));
             }
         }
 
-        // For every item in wow I will get the verlet and modify the verlet cell and index pos
-        for (i, cell_index, cell_pos) in wow {
-            self.verlets[i].set_last_grid(cell_index, cell_pos);
-        }
         
         let neighbor_offsets: [usize; 4] = [
             1,                  // right
