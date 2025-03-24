@@ -22,11 +22,11 @@ async fn main() {
     let ball_size = 2.0;
     let mut solver = Solver::new(
         &[],
-        vec2(0.0, -0.0),  // Gravity
+        vec2(0.0, 0.0),  // Gravity
         constraint_radius,
         8,
         ball_size * 2.5,
-        (1, 2)
+        (3, 4)
     );
     if let Err(e) = solver.load_colors("colors.bin") {
         println!("Error loading colors: {}", e);

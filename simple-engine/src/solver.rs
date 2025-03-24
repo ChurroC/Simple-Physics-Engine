@@ -2,6 +2,7 @@ use std::sync::Arc;
 use glam::{Vec2, Vec4};
 use physics_engine::ThreadPool;
 use super::verlet::Verlet;
+use rayon::prelude::*;
 
 pub struct Solver {
     verlets: Vec<Verlet>,
@@ -78,38 +79,41 @@ impl Solver {
     fn find_collisions_space_partitioning(&mut self) -> Vec<(usize, usize)> {
         let mut collisions: Vec<(usize, usize)> = vec![];
 
-        for cell in &mut self.grid {
-            cell.clear();
-        }
-        
-        for (i, verlet) in self.verlets.iter().enumerate() {
-            // let pos = verlet.get_position();
-            
-            // let cell_x = ((pos.x + self.constraint_radius) / self.cell_size).floor() as usize;
-            // let cell_y = ((pos.y + self.constraint_radius) / self.cell_size).floor() as usize;
-            
-            // let cell_index = (cell_y * self.grid_size) + cell_x;
-            // let last_cell_index = verlet.get_last_grid();
-            // let last_index_in_cell = verlet.get_position_in_cell();
+        // for cell in &mut self.grid {
+        //     cell.clear();
+        // }
 
-            // if cell_index < self.grid.len() && last_cell != cell_index {
-            //     if last_cell < self.grid.len() { // Cause I set the default to be max usize
-            //         self.grid.swap_remove(last_cell); // Taking it out the verlet from the last cell - But we also move in the last verlet in the grid to the last_cell
-            //         let swapped_verlet_index = self.grid[last_cell]; // The swaped is not in last_cell and we get index
-            //     }
-            //     self.grid[cell_index].push(i);
-            //     verlet.set_last_grid(cell_index, self.grid[cell_index].len() - 1);
-            // }
-            
+        let mut wow: Vec<(usize, usize, usize)> = vec![]; // Index in verlets, index in grid, index in cell
+        for (i, verlet) in self.verlets.iter().enumerate() {
             let pos = verlet.get_position();
-                
+            
             let cell_x = ((pos.x + self.constraint_radius) / self.cell_size).floor() as usize;
             let cell_y = ((pos.y + self.constraint_radius) / self.cell_size).floor() as usize;
             
             let cell_index = (cell_y * self.grid_size) + cell_x;
-            if cell_index < self.grid.len() {
+            let last_cell_index = verlet.get_last_grid();
+            let last_index = verlet.get_position_in_cell();
+            println!("Cell index: {}, Last cell index: {}, Last index: {}", cell_index, last_cell_index, last_index);
+
+            if cell_index < self.grid.len() && last_cell_index != cell_index {
+                if last_cell_index < self.grid.len() { // Cause I set the default to be max usize
+                    println!("{:?}", self.grid[last_cell_index]);
+                    self.grid[last_cell_index].swap_remove(last_index); // Taking it out the verlet from the last cell - But we also move in the last verlet in the grid to the last_cell
+                    println!("Swapping out {} from cell {}", i, last_cell_index);
+                    println!("{:?}", self.grid[last_cell_index]);
+                    if last_index < self.grid[last_cell_index].len() && self.grid[last_cell_index].len() != 1 {
+                        wow.push((self.grid[last_cell_index][last_index], last_cell_index, last_index));
+                    }
+                }
                 self.grid[cell_index].push(i);
+                println!("Pushed {cell_index} {:?}", self.grid[cell_index]);
+                wow.push((i, cell_index, self.grid[cell_index].len() - 1));
             }
+        }
+
+        // For every item in wow I will get the verlet and modify the verlet cell and index pos
+        for (i, cell_index, cell_pos) in wow {
+            self.verlets[i].set_last_grid(cell_index, cell_pos);
         }
         
         let neighbor_offsets: [usize; 4] = [
@@ -157,63 +161,16 @@ impl Solver {
             }
         }
         
-        /*
-                let neighbor_offsets: [(i32, i32); 4] = [
-            (1, 0),    // right
-            (1, 1),    // bottom-right
-            (0, 1),    // bottom
-            (-1, 1),   // bottom-left
-        ];
-
-        // Grids are filled with indices of verlets
-        for y in 0..self.grid_size {
-            for x in 0..self.grid_size {
-                let cell_index = y * self.grid_size + x;
-                
-                // Check collisions within this cell
-                let particles_in_cell = &self.grid[cell_index];
-                for i in 0..particles_in_cell.len() {
-                    let particle_i = particles_in_cell[i];
-                    let particles_in_cell_count = particles_in_cell.len();
-                    
-                    // Check against other particles in the same cell
-                    if particles_in_cell_count > 0 {
-                        for j in (i + 1)..particles_in_cell.len() {
-                            let particle_j = particles_in_cell[j];
-                            collisions.push((particle_i.min(particle_j), particle_i.max(particle_j)));
-                        }
-    
-                        // Check against particles in neighboring cells
-                        for &(dx, dy) in &neighbor_offsets {
-                            let nx = x as i32 + dx;
-                            let ny = y as i32 + dy;
-                            
-                            // Check if neighbor is in bounds
-                            if nx >= 0 && nx < self.grid_size as i32 && 
-                               ny >= 0 && ny < self.grid_size as i32 {
-                                let neighbor_index = (ny as usize * self.grid_size) + nx as usize;
-                                
-                                // Check against all particles in the neighboring cell
-                                for &particle_j in &self.grid[neighbor_index] {
-                                    collisions.push((particle_i.min(particle_j), particle_i.max(particle_j)));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-         */
-        
         collisions
     }
 
     fn find_collisions_space_partitioning_parallel(&mut self) -> Vec<(usize, usize)> {
+        // Clear all cells
         for cell in &mut self.grid {
             cell.clear();
         }
     
-        // Populate using iterators
+        // Populate the grid
         self.verlets.iter().enumerate()
             .for_each(|(i, verlet)| {
                 let pos = verlet.get_position();
@@ -227,95 +184,76 @@ impl Solver {
                 }
             });
         
-        // Wrap grid in Arc for thread-safe sharing without cloning the actual data
+        // Create a clone of the grid for thread-safe sharing
         let grid = Arc::new(self.grid.clone());
-        let grid_size = self.grid_size;
-    
-        // Define neighbor offsets for collision checks
-        let neighbor_offsets: [(i32, i32); 4] = [
-            (1, 0),    // right
-            (1, 1),    // bottom-right
-            (0, 1),    // bottom
-            (-1, 1),   // bottom-left
-        ];
+    let grid_size = self.grid_size;
+    let total_cells = self.grid.len();
 
-        let mut handles = vec![];
-
-        let x_regions = self.region_split.0;
-        let y_regions= self.region_split.1;
+    // Define neighbor offsets as direct index offsets
+    let neighbor_offsets: [isize; 4] = [
+        1,                    // right
+        grid_size as isize + 1,   // bottom-right
+        grid_size as isize,       // bottom
+        grid_size as isize - 1    // bottom-left
+    ];
     
-        for y_region in 0..y_regions {
-            let start_y = (y_region * grid_size) / y_regions;
-            let end_y = ((y_region + 1) * grid_size) / y_regions;
+    // Create a range of cell indices
+    let cell_indices: Vec<usize> = (0..total_cells).collect();
     
-            for x_region in 0..x_regions {
-                // Clone the Arc (cheap), not the grid itself
-                let grid_ref = Arc::clone(&grid);
+    // Process all cells in parallel with Rayon
+    let all_collisions: Vec<(usize, usize)> = cell_indices.par_iter()
+        .flat_map(|&cell_index| {
+            let grid_ref = &grid;
+            let mut collisions = vec![];
+            
+            let particles_in_cell = &grid_ref[cell_index];
+            let particles_in_cell_count = particles_in_cell.len();
+            
+            // Skip empty cells
+            if particles_in_cell_count == 0 {
+                return collisions;
+            }
+            
+            for i in 0..particles_in_cell_count {
+                let particle_i = particles_in_cell[i];
                 
-                // Calculate this thread's region
-                let start_x = (x_region * grid_size) / x_regions;
-                let end_x = ((x_region + 1) * grid_size) / x_regions;
-    
-                // Process assigned region
-                let handle = self.pool.execute(move || {
-                    let mut collisions = vec![];
+                // Check against other particles in the same cell
+                for j in (i + 1)..particles_in_cell_count {
+                    let particle_j = particles_in_cell[j];
+                    collisions.push((particle_i.min(particle_j), particle_i.max(particle_j)));
+                }
+                
+                // Check against particles in neighboring cells
+                for &offset in &neighbor_offsets {
+                    let neighbor_index = cell_index as isize + offset;
                     
-                    for y in start_y..end_y {
-                        for x in start_x..end_x {
-                            let cell_index = y * grid_size + x;
-                            
-                            // Check collisions within this cell
-                            let particles_in_cell = &grid_ref[cell_index];
-                            let particles_in_cell_count = particles_in_cell.len();
-
-                            if particles_in_cell_count > 0 {
-                                for i in 0..particles_in_cell_count {
-                                    let particle_i = particles_in_cell[i];
-                                    
-                                    // Check against other particles in the same cell
-                                    for j in (i + 1)..particles_in_cell_count {
-                                        let particle_j = particles_in_cell[j];
-                                        collisions.push((particle_i.min(particle_j), particle_i.max(particle_j)));
-                                    }
-                
-                
-                                    // Check against particles in neighboring cells
-                                    for &(dx, dy) in &neighbor_offsets {
-                                        let nx = x as i32 + dx;
-                                        let ny = y as i32 + dy;
-                                        
-                                        // Check if neighbor is in bounds
-                                        if nx >= 0 && nx < grid_size as i32 && 
-                                           ny >= 0 && ny < grid_size as i32 {
-                                            let neighbor_index = (ny as usize * grid_size) + nx as usize;
-                                            
-                                            // Check against all particles in the neighboring cell
-                                            for &particle_j in &grid_ref[neighbor_index] {
-                                                collisions.push((particle_i.min(particle_j), particle_i.max(particle_j)));
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            
+                    // Boundary checking
+                    if neighbor_index >= 0 && neighbor_index < total_cells as isize {
+                        let neighbor_index = neighbor_index as usize;
+                        
+                        // Edge case checking for wrapping
+                        let x = cell_index % grid_size;
+                        
+                        // Check if we're at an edge and would wrap to the wrong row
+                        if (offset == 1 && x == grid_size - 1) ||                     // right edge
+                           (offset == (grid_size + 1) as isize && x == grid_size - 1) || // bottom-right at right edge
+                           (offset == (grid_size - 1) as isize && x == 0) {              // bottom-left at left edge
+                            continue;
+                        }
+                        
+                        // Check against all particles in neighboring cell
+                        for &particle_j in &grid_ref[neighbor_index] { 
+                            collisions.push((particle_i.min(particle_j), particle_i.max(particle_j)));
                         }
                     }
-                    
-                    collisions
-                });
-                
-                handles.push(handle);
+                }
             }
-        }
-        
-        // Collect results from all threads
-        let mut all_collisions = Vec::new();
-        for handle in handles {
-            let result = handle.recv().unwrap();
-            all_collisions.extend(result);
-        }
-        
-        all_collisions
+            
+            collisions
+        })
+        .collect();
+    
+    all_collisions
     }
 
     fn solve_collisions(&mut self, collisions: Vec<(usize, usize)>, dt: f32) {
