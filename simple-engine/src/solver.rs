@@ -1,8 +1,7 @@
 use std::sync::Arc;
-
-use super::verlet::Verlet;
 use glam::{Vec2, Vec4};
 use physics_engine::ThreadPool;
+use super::verlet::Verlet;
 
 pub struct Solver {
     verlets: Vec<Verlet>,
@@ -46,7 +45,7 @@ impl Solver {
 
             self.apply_wall_constraints(sub_dt);
 
-            let collisions: Vec<(usize, usize)> = self.find_collisions_space_partitioning_parallel();
+            let collisions: Vec<(usize, usize)> = self.find_collisions_space_partitioning();
             self.solve_collisions(collisions, sub_dt);
 
             for verlet in &mut self.verlets {
@@ -82,10 +81,28 @@ impl Solver {
         for cell in &mut self.grid {
             cell.clear();
         }
-
+        
         for (i, verlet) in self.verlets.iter().enumerate() {
-            let pos = verlet.get_position();
+            // let pos = verlet.get_position();
             
+            // let cell_x = ((pos.x + self.constraint_radius) / self.cell_size).floor() as usize;
+            // let cell_y = ((pos.y + self.constraint_radius) / self.cell_size).floor() as usize;
+            
+            // let cell_index = (cell_y * self.grid_size) + cell_x;
+            // let last_cell_index = verlet.get_last_grid();
+            // let last_index_in_cell = verlet.get_position_in_cell();
+
+            // if cell_index < self.grid.len() && last_cell != cell_index {
+            //     if last_cell < self.grid.len() { // Cause I set the default to be max usize
+            //         self.grid.swap_remove(last_cell); // Taking it out the verlet from the last cell - But we also move in the last verlet in the grid to the last_cell
+            //         let swapped_verlet_index = self.grid[last_cell]; // The swaped is not in last_cell and we get index
+            //     }
+            //     self.grid[cell_index].push(i);
+            //     verlet.set_last_grid(cell_index, self.grid[cell_index].len() - 1);
+            // }
+            
+            let pos = verlet.get_position();
+                
             let cell_x = ((pos.x + self.constraint_radius) / self.cell_size).floor() as usize;
             let cell_y = ((pos.y + self.constraint_radius) / self.cell_size).floor() as usize;
             
@@ -95,7 +112,53 @@ impl Solver {
             }
         }
         
-        let neighbor_offsets: [(i32, i32); 4] = [
+        let neighbor_offsets: [usize; 4] = [
+            1,                  // right
+            self.grid_size + 1, // bottom-right
+            self.grid_size,     // bottom
+            self.grid_size - 1  // bottom-left
+        ];
+
+        for cell_index in 0..self.grid.len() {
+            // Calculate x and y if needed
+            
+            let particles_in_cell = &self.grid[cell_index];
+            let particles_in_cell_count = particles_in_cell.len();
+
+            for i in 0..particles_in_cell_count {
+                let particle_i = particles_in_cell[i];
+                
+                // Check against other particles in the same cell
+                for j in (i + 1)..particles_in_cell_count {
+                    let particle_j = particles_in_cell[j];
+                    collisions.push((particle_i.min(particle_j), particle_i.max(particle_j)));
+                }
+
+                // Check against particles in neighboring cells
+                for &offset in &neighbor_offsets {
+                    let neighbor_index = cell_index + offset;
+                    
+                    // Boundary checking
+                    if neighbor_index < self.grid.len() {
+                        // Edge case checking (for right/left edges)
+                        let x = cell_index % self.grid_size;
+                        if (offset == 1 && x == self.grid_size - 1) ||                // right edge
+                        (offset == self.grid_size + 1 && x == self.grid_size - 1) || // bottom-right at right edge
+                        (offset == self.grid_size - 1 && x == 0) {                 // bottom-left at left edge
+                            continue;
+                        }
+                        
+                        // Check against all particles in neighboring cell
+                        for &particle_j in &self.grid[neighbor_index] { 
+                            collisions.push((particle_i.min(particle_j), particle_i.max(particle_j)));
+                        }
+                    }
+                }
+            }
+        }
+        
+        /*
+                let neighbor_offsets: [(i32, i32); 4] = [
             (1, 0),    // right
             (1, 1),    // bottom-right
             (0, 1),    // bottom
@@ -140,12 +203,15 @@ impl Solver {
                 }
             }
         }
+         */
         
         collisions
     }
 
     fn find_collisions_space_partitioning_parallel(&mut self) -> Vec<(usize, usize)> {
-        let mut new_grid = vec![Vec::new(); self.grid.len()];
+        for cell in &mut self.grid {
+            cell.clear();
+        }
     
         // Populate using iterators
         self.verlets.iter().enumerate()
@@ -156,13 +222,13 @@ impl Solver {
                 let cell_y = ((pos.y + self.constraint_radius) / self.cell_size).floor() as usize;
                 
                 let cell_index = (cell_y * self.grid_size) + cell_x;
-                if cell_index < new_grid.len() {
-                    new_grid[cell_index].push(i);
+                if cell_index < self.grid.len() {
+                    self.grid[cell_index].push(i);
                 }
             });
         
         // Wrap grid in Arc for thread-safe sharing without cloning the actual data
-        let grid = Arc::new(new_grid);
+        let grid = Arc::new(self.grid.clone());
         let grid_size = self.grid_size;
     
         // Define neighbor offsets for collision checks

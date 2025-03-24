@@ -26,7 +26,7 @@ async fn main() {
         constraint_radius,
         8,
         ball_size * 2.5,
-        (3, 3)
+        (1, 2)
     );
     if let Err(e) = solver.load_colors("colors.bin") {
         println!("Error loading colors: {}", e);
@@ -68,21 +68,21 @@ async fn main() {
             total_time += dt;
             ball_drop_accumlator += 1;
 
-            if ball_drop_accumlator >= ball_drop_per_frame {
+            if ball_drop_accumlator >= ball_drop_per_frame && !solver.is_container_full() {
                 // let mut ball = Verlet::new(vec2(0.15 * screen_width, screen_height * 2.0 / 7.0));
                 // ball.set_radius(ball_size);
                 // ball.set_velocity(vec2(0.0, -30.0), dt as f32 / 1000.0);
                 // solver.add_position(ball);
 
-                let angle = angle_degree as f32 / 180.0 * std::f32::consts::PI;
-                let angle_vec = vec2(angle.cos(), angle.sin());
-                let mut ball = Verlet::new(constraint_radius * 0.98 * angle_vec);
-                ball.set_radius(ball_size);
-                ball.set_velocity(-100.0 * angle_vec, dt as f32 / 1000.0);
-                solver.add_position(ball);
-                angle_degree = (angle_degree % 360) + 3;
-                println!("Verlets: {}", solver.get_verlets().len());
-                println!("FPS: {:.0}", fps);
+                for _ in 0..10 {
+                    let angle = angle_degree as f32 / 180.0 * std::f32::consts::PI;
+                    let angle_vec = vec2(angle.cos(), angle.sin());
+                    let mut ball = Verlet::new(constraint_radius * 0.98 * angle_vec);
+                    ball.set_radius(ball_size);
+                    ball.set_velocity(-100.0 * angle_vec, dt as f32 / 1000.0);
+                    solver.add_position(ball);
+                    angle_degree = (angle_degree % 360) + 3;
+                }
 
 
                 ball_drop_accumlator = 0;
@@ -113,8 +113,8 @@ async fn main() {
             }
         }
         
-        // clear_background(BLACK);
-        // draw_circle_lines(screen_width / 2.0, screen_height / 2.0, constraint_radius, 1.0, WHITE);
+        clear_background(BLACK);
+        draw_circle_lines(screen_width / 2.0, screen_height / 2.0, constraint_radius, 1.0, WHITE);
 
         let alpha = accumulator as f32 / dt as f32;
         for verlet in solver.get_verlets() {
@@ -122,12 +122,12 @@ async fn main() {
             let origin = vec2(screen_width / 2.0, screen_height / 2.0);
             let interpolated_pos = origin + verlet.get_interpolated_position(alpha)  * vec2(1.0, -1.0);
             let (x, y) = interpolated_pos.into();
-            // draw_circle(x, y, verlet.get_radius(), Color::from_rgba(
-            //     verlet.get_color().x as u8,
-            //     verlet.get_color().y as u8,
-            //     verlet.get_color().z as u8,
-            //     255
-            // ));
+            draw_circle(x, y, verlet.get_radius(), Color::from_rgba(
+                verlet.get_color().x as u8,
+                verlet.get_color().y as u8,
+                verlet.get_color().z as u8,
+                255
+            ));
         }
 
         if get_fps() < fps_threshold && balls_til_60_fps == 0 {
@@ -138,28 +138,28 @@ async fn main() {
         } else if balls_til_60_fps == 0 {
             slow_frames_accumulator = 0;
         }
-        // draw_texts(
-        //     &[
-        //         &format!(
-        //             "FPS: {fps:.0}",
-        //         ),
-        //         &format!(
-        //             "time: {:.3}", total_time as f32 / 1000.0
-        //         ),
-        //         &format!(
-        //             "Verlets: {}", solver.get_verlets().len()
-        //         ),
-        //         &format!(
-        //             "60 fps ball count: {balls_til_60_fps}"
-        //         ),
-        //     ],
-        //     20.0,
-        //     30.0,
-        //     30.0,
-        //     RED
-        // );
+        draw_texts(
+            &[
+                &format!(
+                    "FPS: {fps:.0}",
+                ),
+                &format!(
+                    "time: {:.3}", total_time as f32 / 1000.0
+                ),
+                &format!(
+                    "Verlets: {}", solver.get_verlets().len()
+                ),
+                &format!(
+                    "60 fps ball count: {balls_til_60_fps}"
+                ),
+            ],
+            20.0,
+            30.0,
+            30.0,
+            RED
+        );
 
-        // next_frame().await;
+        next_frame().await;
     }
 }
 
@@ -168,7 +168,3 @@ fn draw_texts(texts: &[&str], x: f32, y: f32, size: f32, color: Color) {
         draw_text(text, x, y + i as f32 * size, size, color);
     }
 }
-
-// fn start_time.elapsed().as_millis() -> u128 {
-//     start_time.elapsed().as_millis()
-// }

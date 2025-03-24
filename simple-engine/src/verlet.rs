@@ -1,11 +1,11 @@
 use glam::{Vec2, Vec4, vec4};
-use serde::{Serialize, Deserialize};
 
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct Verlet {
     position: Vec2,
     last_position: Vec2,
+    last_grid: usize,
+    position_in_cell: usize,
     acceleration: Vec2,
     last_acceleration: Vec2,
     radius: f32,
@@ -19,6 +19,8 @@ impl Verlet {
         Verlet {
             position,
             last_position: position,
+            last_grid: usize::MAX,
+            position_in_cell: usize::MAX,
             acceleration: Vec2::ZERO,
             last_acceleration: Vec2::ZERO,
             radius: 9.0,
@@ -94,5 +96,20 @@ impl Verlet {
         self.last_acceleration = self.acceleration;
         self.last_dt = dt;
         self.acceleration = Vec2::ZERO;
+    }
+
+    pub fn get_last_grid(&self) -> usize {
+        self.last_grid
+    }
+    pub fn set_last_grid(&mut self, grid: usize, position: usize) {
+        self.last_grid = grid;
+        self.position_in_cell = position;
+    }
+
+    pub fn get_position_in_cell(&self) -> usize {
+        self.position_in_cell
+    }
+    pub fn set_position_in_cell(&mut self, position: usize) {
+        self.position_in_cell = position;
     }
 }
