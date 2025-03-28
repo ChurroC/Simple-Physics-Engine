@@ -1,8 +1,7 @@
-use std::sync::Arc;
+use std::vec;
+
 use glam::{Vec2, Vec4};
-use physics_engine::ThreadPool;
 use super::verlet::Verlet;
-use rayon::prelude::*;
 
 pub struct Solver {
     verlets: Vec<Verlet>,
@@ -14,13 +13,13 @@ pub struct Solver {
     grid: Vec<Vec<usize>>,
     color_frames: Vec<Vec4>,
     current_frame: usize,
-    pool: ThreadPool,
-    region_split: (usize, usize)
+    constraints: Vec<(usize, usize, f32)>,
+    contraint_spring_constant: f32,
 }
 
 
 impl Solver {
-    pub fn new(verlets: &[Verlet], gravity: Vec2, constraint_radius: f32, subdivision: usize, cell_size: f32, region_split: (usize, usize)) -> Self {
+    pub fn new(verlets: &[Verlet], gravity: Vec2, constraint_radius: f32, subdivision: usize, cell_size: f32, contraint_spring_constant: f32) -> Self {
         let grid_size = (constraint_radius * 2.0 / cell_size) as usize; 
         Solver {
             verlets: verlets.iter().cloned().collect(),
@@ -32,8 +31,8 @@ impl Solver {
             grid: vec![vec![]; grid_size * grid_size],
             color_frames: Vec::new(),
             current_frame: 0,
-            pool: ThreadPool::new(region_split.0 * region_split.1 + 2),
-            region_split
+            constraints: vec![],
+            contraint_spring_constant
         }
     }
 
@@ -46,8 +45,11 @@ impl Solver {
 
             self.apply_wall_constraints(sub_dt);
 
-            let collisions: Vec<(usize, usize)> = self.find_collisions_space_partitioning_parallel();
+            self.solve_contraints();
+
+            let collisions: Vec<(usize, usize)> = self.find_collisions_space_partitioning();
             self.solve_collisions(collisions, sub_dt);
+
 
             for verlet in &mut self.verlets {
                 verlet.update_position(sub_dt);
@@ -144,116 +146,6 @@ impl Solver {
         collisions
     }
 
-    fn find_collisions_space_partitioning_parallel(&mut self) -> Vec<(usize, usize)> {
-        for cell in &mut self.grid {
-            cell.clear();
-        }
-    
-        // Populate using iterators
-        self.verlets.iter().enumerate()
-            .for_each(|(i, verlet)| {
-                let pos = verlet.get_position();
-                
-                let cell_x = ((pos.x + self.constraint_radius) / self.cell_size).floor() as usize;
-                let cell_y = ((pos.y + self.constraint_radius) / self.cell_size).floor() as usize;
-                
-                let cell_index = (cell_y * self.grid_size) + cell_x;
-                if cell_index < self.grid.len() {
-                    self.grid[cell_index].push(i);
-                }
-            });
-        
-        // Wrap grid in Arc for thread-safe sharing without cloning the actual data
-        let grid = Arc::new(self.grid.clone());
-        let grid_size = self.grid_size;
-    
-        // Define neighbor offsets for collision checks
-        let neighbor_offsets: [(i32, i32); 4] = [
-            (1, 0),    // right
-            (1, 1),    // bottom-right
-            (0, 1),    // bottom
-            (-1, 1),   // bottom-left
-        ];
-
-        let mut handles = vec![];
-
-        let x_regions = self.region_split.0;
-        let y_regions= self.region_split.1;
-    
-        for y_region in 0..y_regions {
-            let start_y = (y_region * grid_size) / y_regions;
-            let end_y = ((y_region + 1) * grid_size) / y_regions;
-    
-            for x_region in 0..x_regions {
-                // Clone the Arc (cheap), not the grid itself
-                let grid_ref = Arc::clone(&grid);
-                
-                // Calculate this thread's region
-                let start_x = (x_region * grid_size) / x_regions;
-                let end_x = ((x_region + 1) * grid_size) / x_regions;
-    
-                // Process assigned region
-                let handle = self.pool.execute(move || {
-                    let mut collisions = vec![];
-                    
-                    for y in start_y..end_y {
-                        for x in start_x..end_x {
-                            let cell_index = y * grid_size + x;
-                            
-                            // Check collisions within this cell
-                            let particles_in_cell = &grid_ref[cell_index];
-                            let particles_in_cell_count = particles_in_cell.len();
-
-                            if particles_in_cell_count > 0 {
-                                for i in 0..particles_in_cell_count {
-                                    let particle_i = particles_in_cell[i];
-                                    
-                                    // Check against other particles in the same cell
-                                    for j in (i + 1)..particles_in_cell_count {
-                                        let particle_j = particles_in_cell[j];
-                                        collisions.push((particle_i.min(particle_j), particle_i.max(particle_j)));
-                                    }
-                
-                
-                                    // Check against particles in neighboring cells
-                                    for &(dx, dy) in &neighbor_offsets {
-                                        let nx = x as i32 + dx;
-                                        let ny = y as i32 + dy;
-                                        
-                                        // Check if neighbor is in bounds
-                                        if nx >= 0 && nx < grid_size as i32 && 
-                                           ny >= 0 && ny < grid_size as i32 {
-                                            let neighbor_index = (ny as usize * grid_size) + nx as usize;
-                                            
-                                            // Check against all particles in the neighboring cell
-                                            for &particle_j in &grid_ref[neighbor_index] {
-                                                collisions.push((particle_i.min(particle_j), particle_i.max(particle_j)));
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            
-                        }
-                    }
-                    
-                    collisions
-                });
-                
-                handles.push(handle);
-            }
-        }
-        
-        // Collect results from all threads
-        let mut all_collisions = Vec::new();
-        for handle in handles {
-            let result = handle.recv().unwrap();
-            all_collisions.extend(result);
-        }
-        
-        all_collisions
-    }
-
     fn solve_collisions(&mut self, collisions: Vec<(usize, usize)>, dt: f32) {
         let coefficient_of_restitution = 0.93;
 
@@ -288,6 +180,48 @@ impl Solver {
                 verlet1.set_velocity((vel1_perp + vel1f) * coefficient_of_restitution, dt);
                 verlet2.set_velocity((vel2_perp + vel2f) * coefficient_of_restitution, dt);
             }
+        }
+    }
+
+    pub fn create_distance_constraint(&mut self, index1: usize, index2: usize, distance: f32) -> Result<(), String> {
+        if index1 >= self.verlets.len() || index2 >= self.verlets.len() {
+            return Err::<(), String>(String::from("Index out of bounds"));
+        }
+        self.constraints.push((index1.min(index2), index1.max(index2), distance));
+        Ok(())
+    }
+    pub fn create_distance_constraints(&mut self, contraints: &[(usize, usize, f32)]) -> Result<(), String> {
+        for &(index1, index2, distance) in contraints {
+            if index1 >= self.verlets.len() || index2 >= self.verlets.len() {
+                return Err::<(), String>(String::from("Index out of bounds"));
+            }
+            self.constraints.push((index1.min(index2), index1.max(index2), distance));
+        }
+        Ok(())
+    }
+    pub fn get_contraints(&self) -> &Vec<(usize, usize, f32)> {
+        &self.constraints
+    }
+
+    fn solve_contraints(&mut self) {
+        let spring_dampening = 0.1 * self.contraint_spring_constant;
+
+        for &(i, j, distance) in &self.constraints {
+            let (left, right) = self.verlets.split_at_mut(j);
+            let verlet1 = &mut left[i];
+            let verlet2 = &mut right[0];
+
+            let dist_vec = verlet2.get_position() - verlet1.get_position();
+            let dist = dist_vec.length();
+
+            let spring_force = dist_vec.normalize() * (dist - distance) * self.contraint_spring_constant;
+
+            let rel_velocity = verlet2.get_velocity() - verlet1.get_velocity(); // Dampening force is opposite of the relative velocity
+            let damping_force = rel_velocity.dot(dist_vec.normalize()) * dist_vec.normalize() * spring_dampening; // We also only want the vel that is in the direction of the spring - Or the amount they are pushing or getting closer to each other
+
+            let force = spring_force + damping_force;
+            verlet1.add_acceleration(force / verlet1.get_mass());
+            verlet2.add_acceleration(-force / verlet2.get_mass());
         }
     }
 
@@ -450,5 +384,8 @@ impl Solver {
 
     pub fn get_verlets(&self) -> &Vec<Verlet> {
         &self.verlets
+    }
+    pub fn get_verlets_mut(&mut self) -> &mut Vec<Verlet> {
+        &mut self.verlets
     }
 }

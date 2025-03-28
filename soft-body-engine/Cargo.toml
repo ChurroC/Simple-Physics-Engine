@@ -1,0 +1,10 @@
+[package]
+name = "soft-body-engine"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+macroquad = "0.4"
+glam = { version = "0.24", features = ["serde"] }
+image = "0.25.5"
+bincode = "1.3"
