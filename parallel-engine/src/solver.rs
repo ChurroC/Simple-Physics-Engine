@@ -2,7 +2,6 @@ use std::sync::Arc;
 use glam::{Vec2, Vec4};
 use physics_engine::ThreadPool;
 use super::verlet::Verlet;
-use rayon::prelude::*;
 
 pub struct Solver {
     verlets: Vec<Verlet>,

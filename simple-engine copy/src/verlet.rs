@@ -10,7 +10,6 @@ pub struct Verlet {
     density: f32,
     last_dt: f32,
     color: Vec4,
-    anchored: bool,
 }
 
 impl Verlet {
@@ -24,7 +23,6 @@ impl Verlet {
             density: 1.0,
             last_dt: 0.0,
             color: vec4(255.0, 255.0, 255.0, 1.0),
-            anchored: false,
         }
     }
     

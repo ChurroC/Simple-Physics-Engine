@@ -4,7 +4,7 @@ mod verlet;
 use solver::Solver;
 use verlet::Verlet;
 
-use macroquad::{color::GREEN, prelude::{clear_background, draw_circle, draw_circle_lines, draw_text, get_fps, is_key_pressed, is_mouse_button_down, mouse_position, next_frame, screen_height, screen_width, Color, KeyCode, MouseButton, BLACK, RED, WHITE}, shapes::draw_line};
+use macroquad::prelude::{clear_background, draw_circle, draw_circle_lines, draw_text, get_fps, is_key_pressed, is_mouse_button_down, mouse_position, next_frame, screen_height, screen_width, Color, KeyCode, MouseButton, BLACK, RED, WHITE, GREEN, draw_line};
 use glam::vec2;
 
 use std::time::Instant;
@@ -17,7 +17,7 @@ async fn main() {
 
     let constraint_radius = screen_height.min(screen_width) / 2.0 - 50.0;
 
-    let ball_size = 2.0;
+    let ball_size = 10.0;
     let mut solver = Solver::new(
         &[
             Verlet::new(vec2(0.0, 0.0)),  // Center
@@ -29,7 +29,7 @@ async fn main() {
         constraint_radius,
         8,
         ball_size * 2.5,
-        100000.0,
+        10000.0,
     );
     if let Err(e) = solver.load_colors("colors.bin") {
         println!("Error loading colors: {}", e);
@@ -56,19 +56,75 @@ async fn main() {
 
     let mut angle_degree = 0;
 
-    // solver.get_verlets_mut()[0].set_velocity(vec2(3.0, 0.0), dt as f32 / 1000.0);
-    // solver.get_verlets_mut()[1].set_velocity(vec2(5.0, 0.0), dt as f32 / 1000.0);\
-    if solver.create_distance_constraints(&[
-        (0, 1, 100.0),
-        (1, 3, 100.0),
-        (3, 2, 100.0),
-        (2, 0, 100.0),
-        (0, 3, 100.0),
-        (1, 2, 100.0),
-    ]).is_err() {
-        println!("Error creating distance constraint");
-    }
+    // CUBE
+    // if solver.create_distance_constraints(&[
+    //     (0, 1, 100.0),
+    //     (1, 3, 100.0),
+    //     (3, 2, 100.0),
+    //     (2, 0, 100.0),
+    //     (0, 3, 100.0),
+    //     (1, 2, 100.0),
+    // ]).is_err() {
+    //     println!("Error creating distance constraint");
+    // }
     
+    // Create a cloth grid
+    let grid_width = 10;
+    let grid_height = 10;
+    let spacing = 20.0; // Distance between particles
+
+    // Create the particles
+    let mut cloth_particles = Vec::new();
+    for y in 0..grid_height {
+        for x in 0..grid_width {
+            let x_pos = (x as f32 * spacing) - (grid_width as f32 * spacing / 2.0);
+            let y_pos = (y as f32 * spacing);
+            
+            let mut particle = Verlet::new(vec2(x_pos, y_pos));
+            particle.set_radius(ball_size / 2.0); // Smaller radius for cloth
+            
+            // Optional: anchor the top row
+            
+            cloth_particles.push(particle);
+        }
+    }
+
+    // Add all particles to the solver
+    let start_index = solver.get_verlets().len();
+    solver.add_positions(&mut cloth_particles);
+
+    // Create structural constraints (horizontal and vertical)
+    let mut constraints = Vec::new();
+    for y in 0..grid_height {
+        for x in 0..grid_width {
+            let idx = start_index + y * grid_width + x;
+            
+            // Horizontal connections
+            if x < grid_width - 1 {
+                let right_idx = idx + 1;
+                constraints.push((idx, right_idx, spacing));
+            }
+            
+            // Vertical connections
+            if y < grid_height - 1 {
+                let bottom_idx = idx + grid_width;
+                constraints.push((idx, bottom_idx, spacing));
+            }
+            
+            // Optional: Diagonal connections for more stability
+            if x < grid_width - 1 && y < grid_height - 1 {
+                let bottom_right_idx = idx + grid_width + 1;
+                constraints.push((idx, bottom_right_idx, spacing * 1.414)); // sqrt(2) ≈ 1.414
+            }
+            
+            if x > 0 && y < grid_height - 1 {
+                let bottom_left_idx = idx + grid_width - 1;
+                constraints.push((idx, bottom_left_idx, spacing * 1.414));
+            }
+        }
+    }
+
+    solver.create_distance_constraints(&constraints).unwrap();
     
     loop {
         let current_time = start_time.elapsed().as_millis();
@@ -159,33 +215,24 @@ async fn main() {
         } else if balls_til_60_fps == 0 {
             slow_frames_accumulator = 0;
         }
-        draw_texts(
-            &[
-                &format!(
-                    "FPS: {fps:.0}",
-                ),
-                &format!(
-                    "time: {:.3}", total_time as f32 / 1000.0
-                ),
-                &format!(
-                    "Verlets: {}", solver.get_verlets().len()
-                ),
-                &format!(
-                    "60 fps ball count: {balls_til_60_fps}"
-                ),
-            ],
-            20.0,
-            30.0,
-            30.0,
-            RED
-        );
+
+        [
+            &format!(
+                "FPS: {fps:.0}",
+            ),
+            &format!(
+                "time: {:.3}", total_time as f32 / 1000.0
+            ),
+            &format!(
+                "Verlets: {}", solver.get_verlets().len()
+            ),
+            &format!(
+                "60 fps ball count: {balls_til_60_fps}"
+            ),
+        ].iter().enumerate().for_each(|(i, text)| {
+            draw_text(text, 20.0, 30.0 + 30.0 * i as f32, 20.0, RED);
+        });
 
         next_frame().await;
-    }
-}
-
-fn draw_texts(texts: &[&str], x: f32, y: f32, size: f32, color: Color) {
-    for (i, text) in texts.iter().enumerate() {
-        draw_text(text, x, y + i as f32 * size, size, color);
     }
 }

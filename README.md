@@ -3,6 +3,8 @@ SIMPLE
 LINK / CHAINS
 SOFT BODY DYNAMICS - BODDIIES
 3D BALLZ
+Audio Visualizer using planetary forces as msuics volume
+
 
 https://www.gafferongames.com/post/fix_your_timestep/ - Peak
 https://leanrada.com/notes/sweep-and-prune/
