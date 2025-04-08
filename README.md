@@ -4,6 +4,7 @@ LINK / CHAINS
 SOFT BODY DYNAMICS - BODDIIES
 3D BALLZ
 Audio Visualizer using planetary forces as msuics volume
+Use this to model a ball balance, pendulum, spider walker machine language
 
 
 https://www.gafferongames.com/post/fix_your_timestep/ - Peak
