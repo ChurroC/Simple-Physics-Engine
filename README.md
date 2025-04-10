@@ -12,6 +12,7 @@ https://leanrada.com/notes/sweep-and-prune/
 https://developer.nvidia.com/gpugems/gpugems3/part-v-physics-simulation/chapter-32-broad-phase-collision-detection-cuda
 https://lisyarus.github.io/blog/posts/perfect-collisions.html#section-you-spin
 https://gameprogrammingpatterns.com/spatial-partition.html
+https://gameidea.org/2024/02/02/physics-collision-detection/#Space_partitioning
 
 IDEAS:
 use threads to run the colliison detection after the update. so it checks while the frames are being generated. so by the next tien the dt finished we will already have collisons detected.
